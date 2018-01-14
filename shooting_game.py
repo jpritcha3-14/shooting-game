@@ -52,6 +52,23 @@ class Ship(pygame.sprite.Sprite):
         elif not (newvert.top <= self.area.top
             or newvert.bottom >= self.area.bottom):
             self.rect = newvert
+
+class Missile(pygame.sprite.Sprite):
+    def __init__(self, ship):
+        pygame.sprite.Sprite.__init__(self)
+        self.image, self.rect = load_image('missile.png', -1)
+        self.rect.midbottom = ship.rect.midtop
+        screen = pygame.display.get_surface()
+        self.area = screen.get_rect()
+        self.speed = -2
+
+    def update(self):
+        newpos = self.rect.move(0,self.speed)
+        if newpos.bottom > self.area.top:
+            self.rect = newpos
+        else:
+            print('missile destroyed')
+            self.kill()
         
 def main():
 #Initialize everything
@@ -90,7 +107,10 @@ def main():
                 and event.key in direction.keys()):
                 ship.horiz -= direction[event.key][0] 
                 ship.vert -= direction[event.key][1] 
-
+            elif (event.type == KEYDOWN
+                and event.key == K_SPACE):
+                allsprites.add(Missile(ship))
+                
         allsprites.update()
 
         screen.blit(background, (0,0))
