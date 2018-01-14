@@ -5,6 +5,12 @@ from pygame.compat import geterror
 main_dir = os.path.split(os.path.abspath(__file__))[0]
 data_dir = os.path.join(main_dir, 'data')
 
+direction = {None:(0,0), 
+             K_UP:(0,-1), K_w:(0,-1), 
+             K_DOWN:(0,1), K_s:(0,1), 
+             K_LEFT:(-1,0), K_a:(-1,0), 
+             K_RIGHT:(1,0), K_d:(1,0)}
+
 def load_image(name, colorkey=None):
     fullname = os.path.join(data_dir, name)
     try:
@@ -19,6 +25,7 @@ def load_image(name, colorkey=None):
         image.set_colorkey(colorkey, RLEACCEL)
     return image, image.get_rect()
      
+
 class Ship(pygame.sprite.Sprite):
     def __init__(self):
         pygame.sprite.Sprite.__init__(self)
@@ -26,13 +33,19 @@ class Ship(pygame.sprite.Sprite):
         screen = pygame.display.get_surface()
         self.area = screen.get_rect()
         self.rect.center = (screen.get_width()//2 , screen.get_height()//2)
+        self.vert = 0
+        self.horiz = 0
 
     def update(self):
-        pass
-
+        newpos = self.rect.move((self.horiz, self.vert))
+        if not (newpos.left <= self.area.left
+            or newpos.top <= self.area.top
+            or newpos.right >= self.area.right
+            or newpos.bottom >= self.area.bottom):
+            self.rect = newpos
 
 def main():
-# Initialize everything
+#Initialize everything
     pygame.init()
     screen = pygame.display.set_mode((500,500))
     pygame.display.set_caption('Shooting Game')
@@ -53,13 +66,21 @@ def main():
     allsprites = pygame.sprite.RenderPlain((ship,))
 
     while True:
-        clock.tick(60)
+        clock.tick(120)
 
         for event in pygame.event.get():
             if (event.type == QUIT
-             or event.type == KEYDOWN 
-             and event.key == K_ESCAPE):
+                or event.type == KEYDOWN 
+                and event.key == K_ESCAPE):
                 return 
+            elif (event.type == KEYDOWN 
+                and event.key in direction.keys()):
+                ship.horiz += direction[event.key][0] 
+                ship.vert += direction[event.key][1] 
+            elif (event.type == KEYUP 
+                and event.key in direction.keys()):
+                ship.horiz -= direction[event.key][0] 
+                ship.vert -= direction[event.key][1] 
 
         allsprites.update()
 
