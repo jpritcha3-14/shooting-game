@@ -38,12 +38,21 @@ class Ship(pygame.sprite.Sprite):
 
     def update(self):
         newpos = self.rect.move((self.horiz, self.vert))
+        newhoriz = self.rect.move((self.horiz, 0))
+        newvert = self.rect.move((0, self.vert))
+
         if not (newpos.left <= self.area.left
             or newpos.top <= self.area.top
             or newpos.right >= self.area.right
             or newpos.bottom >= self.area.bottom):
             self.rect = newpos
-
+        elif not (newhoriz.left <= self.area.left
+            or newhoriz.right >= self.area.right):
+            self.rect = newhoriz
+        elif not (newvert.top <= self.area.top
+            or newvert.bottom >= self.area.bottom):
+            self.rect = newvert
+        
 def main():
 #Initialize everything
     pygame.init()
