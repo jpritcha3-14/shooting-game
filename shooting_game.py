@@ -42,7 +42,7 @@ class Missile(pygame.sprite.Sprite):
         self.rect.midbottom = ship.rect.midtop
         screen = pygame.display.get_surface()
         self.area = screen.get_rect()
-        self.speed = -2
+        self.speed = -4
 
     def update(self):
         newpos = self.rect.move(0,self.speed)
@@ -90,33 +90,52 @@ class Ship(pygame.sprite.Sprite):
         return self.ExplosionType(self)
 
 class Alien(pygame.sprite.Sprite):
-    def __init__(self, ExplosionType=Explosion):
+    def __init__(self, color):
         pygame.sprite.Sprite.__init__(self)
         self.loc = 0
-        self.image, self.rect = load_image('space_invader_green.png', -1)
+        self.image, self.rect = load_image('space_invader_'+ color +'.png', -1)
         screen = pygame.display.get_surface()
         self.area = screen.get_rect()
-        self.rect.midtop = (random.randint(self.area.left + self.rect.width//2, self.area.right - self.rect.width//2), self.area.top)
+        self.rect.midtop = (random.randint(
+                            self.area.left + self.rect.width//2, 
+                            self.area.right - self.rect.width//2), self.area.top)
         self.initialRect = self.rect
-        self.ExplosionType = ExplosionType
-        self.amp = random.randint(self.rect.width, self.area.width//2)
-        self.freq = 1/20
         self.speed = 1
-        self.moveFunc = lambda x: self.amp*math.sin(x*self.freq)
 
     def update(self):
-        horiz = self.moveFunc(self.loc)
+        horiz, vert = self.moveFunc()
         if horiz + self.initialRect.x > 500:
             horiz -= 500 + self.rect.width
         elif horiz + self.initialRect.x < 0 - self.rect.width:
             horiz += 500 + self.rect.width
-        self.rect = self.initialRect.move((horiz, self.speed*self.loc))
+        self.rect = self.initialRect.move((horiz, self.speed*self.loc + vert))
         self.loc = self.loc + 1
 
     def explode(self):
         self.kill()
-        return self.ExplosionType(self)
+        return Explosion(self)
 
+class Siney(Alien):
+    def __init__(self):
+        Alien.__init__(self, 'green')
+        self.amp = random.randint(self.rect.width, self.area.width//2)
+        self.freq = 1/20
+        self.moveFunc = lambda: (self.amp*math.sin(self.loc*self.freq), 0)
+
+class Roundy(Alien):
+    def __init__(self):
+        Alien.__init__(self, 'red')
+        self.amp = random.randint(self.rect.width, 3*self.rect.width)
+        self.freq = 1/20
+        self.moveFunc = lambda: (self.amp*math.sin(self.loc*self.freq), self.amp*math.cos(self.loc*self.freq))
+
+class Spikey(Alien):
+    def __init__(self):
+        Alien.__init__(self, 'blue')
+        self.slope = random.choice(list(x for x in range(-3,3) if x != 0))
+        self.period = random.choice(list(4*x for x in range(3,31)))
+        self.moveFunc = lambda: (self.slope*(self.loc % self.period) if self.loc % self.period < self.period // 2 else self.slope*self.period // 2 - self.slope*((self.loc % self.period) - self.period//2), 0)
+                
         
 def main():
 #Initialize everything
@@ -137,6 +156,7 @@ def main():
 #Prepare game objects
     clock = pygame.time.Clock()
     ship = Ship(Missile)
+    alienTypes = (Siney, Spikey, Roundy)
     aliens = pygame.sprite.Group()
     missiles = pygame.sprite.Group() 
     explosions = pygame.sprite.Group()
@@ -185,7 +205,7 @@ def main():
 
     #Update Aliens
         if curTime <= 0 and aliensOffScreen > 0:
-            Alien().add(aliens, allsprites)
+            random.choice(alienTypes)().add(aliens, allsprites)
             aliensOffScreen -= 1
             curTime = alienTime
         elif curTime > 0:
