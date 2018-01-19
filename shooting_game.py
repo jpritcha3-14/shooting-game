@@ -1,6 +1,8 @@
-import os, pygame, random
+import os, pygame, random, math
+from collections import deque
 from pygame.locals import *
 from pygame.compat import geterror
+
 
 main_dir = os.path.split(os.path.abspath(__file__))[0]
 data_dir = os.path.join(main_dir, 'data')
@@ -60,6 +62,7 @@ class Ship(pygame.sprite.Sprite):
         self.horiz = 0
         self.MisType = MisType
         self.ExplosionType = ExplosionType
+        self.alive = True
 
     def update(self):
         newpos = self.rect.move((self.horiz, self.vert))
@@ -83,24 +86,27 @@ class Ship(pygame.sprite.Sprite):
 
     def explode(self):
         self.kill()
+        self.alive = False
         return self.ExplosionType(self)
 
 class Alien(pygame.sprite.Sprite):
     def __init__(self, ExplosionType=Explosion):
         pygame.sprite.Sprite.__init__(self)
+        self.loc = 0
         self.image, self.rect = load_image('space_invader_green.png', -1)
-        self.speed = 1
         screen = pygame.display.get_surface()
         self.area = screen.get_rect()
         self.rect.midtop = (random.randint(self.area.left + self.rect.width//2, self.area.right - self.rect.width//2), self.area.top)
+        self.initialRect = self.rect
         self.ExplosionType = ExplosionType
+        self.amp = random.randint(0,min(self.rect.x - self.area.left, self.area.right - self.rect.x - self.rect.width))
+        self.freq = 1/20
+        self.speed = 1
+        self.moveFunc = lambda x: self.amp*math.sin(x*self.freq)
 
     def update(self):
-        newpos = self.rect.move((0, self.speed))
-        if newpos.top < self.area.bottom:
-            self.rect = newpos
-        else:
-            self.rect.midtop = (random.randint(self.area.left + self.rect.width//2, self.area.right - self.rect.width//2), self.area.top)
+        self.rect = self.initialRect.move((self.moveFunc(self.loc), self.speed*self.loc))
+        self.loc = self.loc + 1
 
     def explode(self):
         self.kill()
@@ -126,15 +132,19 @@ def main():
 #Prepare game objects
     clock = pygame.time.Clock()
     ship = Ship(Missile)
-    aliens = pygame.sprite.Group((Alien() for _ in range(5)))
+    aliens = pygame.sprite.Group()
     missiles = pygame.sprite.Group() 
     explosions = pygame.sprite.Group()
-    allsprites = pygame.sprite.RenderPlain((ship, *aliens))
+    allsprites = pygame.sprite.RenderPlain((ship,))
+    alienTime = 50
+    curTime = 0 
+    aliensOffScreen = 5
     
 
-    while True:
+    while ship.alive:
         clock.tick(120)
 
+    #Event Handling
         for event in pygame.event.get():
             if (event.type == QUIT
                 or event.type == KEYDOWN 
@@ -154,20 +164,56 @@ def main():
                 allsprites.add(newMissile)
                 missiles.add(newMissile)
 
+    #Collision Detection
         for alien in aliens:
-            if pygame.sprite.collide_rect(alien, ship):
-                ship.explode().add(allsprites, explosions)
+            
+            if alien.rect.top > alien.area.bottom:
+                alien.kill()
+                aliensOffScreen += 1
+
             for missile in missiles:
                 if pygame.sprite.collide_rect(missile, alien):
                     alien.explode().add(allsprites, explosions)
                     missile.kill()
-                
-        allsprites.update()
+                    
+            if pygame.sprite.collide_rect(alien, ship):
+                ship.explode().add(allsprites, explosions)
 
+    #Update Aliens
+        if curTime <= 0 and aliensOffScreen > 0:
+            Alien().add(aliens, allsprites)
+            aliensOffScreen -= 1
+            curTime = alienTime
+        elif curTime > 0:
+            curTime -= 1
+
+    #Update and draw all sprites 
+        allsprites.update()
+        screen.blit(background, (0,0))
+        allsprites.draw(screen)
+        pygame.display.flip()
+
+    
+    while True:
+        clock.tick(120)
+
+    #Event Handling
+        for event in pygame.event.get():
+            if (event.type == QUIT
+                or event.type == KEYDOWN 
+                and event.key == K_ESCAPE):
+                return False
+            elif (event.type == KEYDOWN 
+                and event.key == K_SPACE):
+                return True
+
+    #Update and draw all sprites 
+        allsprites.update()
         screen.blit(background, (0,0))
         allsprites.draw(screen)
         pygame.display.flip()
 
                 
 if __name__ == '__main__':
-    main()
+    while(main()):
+        pass
