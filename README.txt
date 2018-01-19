@@ -1,6 +1,7 @@
-A simple shooting game built in pygame.
+A simple alien shooting game built in pygame
 
-use WASD or arrow keys to move the ship
-shoot missiles with the space bar
+~ Use WASD move the ship
+~ Shoot missiles with the space bar
+~ Drop bombs with b
 
-
+Aliens have different movement types based on their color
