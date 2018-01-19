@@ -50,14 +50,34 @@ class Missile(pygame.sprite.Sprite):
             self.rect = newpos
         else:
             self.kill()
+            
+class Drawing(object):
+    def __init__(self, drawFunc):
+        self.drawFunc = drawFunc
+    
+    def draw(self):
+        pass
+
+class Bomb(Drawing):
+    def __init__(self, ship):
+        Drawing.__init__(self, pygame.draw.circle)
+        self.center = ship.rect.center 
+        self.radius = 20
+
+    def draw(self):
+        self.radius += 4
+        self.drawFunc(pygame.display.get_surface(), Color(0,0,255,128), self.center, self.radius, 3)
+        if self.center[1] - self.radius <= 0:
+            return False
+        return True
 
 class Ship(pygame.sprite.Sprite):
     def __init__(self, MisType=Missile, ExplosionType=Explosion):
         pygame.sprite.Sprite.__init__(self)
         self.image, self.rect = load_image('ship.png', -1)
-        screen = pygame.display.get_surface()
-        self.area = screen.get_rect()
-        self.rect.midbottom = (screen.get_width()//2, self.area.bottom)
+        self.screen = pygame.display.get_surface()
+        self.area = self.screen.get_rect()
+        self.rect.midbottom = (self.screen.get_width()//2, self.area.bottom)
         self.vert = 0
         self.horiz = 0
         self.MisType = MisType
@@ -80,9 +100,12 @@ class Ship(pygame.sprite.Sprite):
         elif not (newvert.top <= self.area.top
             or newvert.bottom >= self.area.bottom):
             self.rect = newvert
-    
+
     def fire(self):
         return self.MisType(self) 
+
+    def bomb(self):
+        return Bomb(self)
 
     def explode(self):
         self.kill()
@@ -161,10 +184,10 @@ def main():
     missiles = pygame.sprite.Group() 
     explosions = pygame.sprite.Group()
     allsprites = pygame.sprite.RenderPlain((ship,))
+    drawings = []
     alienTime = 50
     curTime = 0 
     aliensOffScreen = 5
-    
 
     while ship.alive:
         clock.tick(120)
@@ -187,6 +210,10 @@ def main():
                 and event.key == K_SPACE):
                 newMissile = ship.fire() 
                 newMissile.add(missiles, allsprites)
+            elif (event.type == KEYDOWN
+                and event.key == K_b):
+                drawings.append(ship.bomb()) 
+
 
     #Collision Detection
         for alien in aliens:
@@ -211,10 +238,18 @@ def main():
         elif curTime > 0:
             curTime -= 1
 
+    
+
     #Update and draw all sprites 
         allsprites.update()
         screen.blit(background, (0,0))
         allsprites.draw(screen)
+
+        for drawing in drawings:
+            if not drawing.draw():
+                drawings.remove(drawing)
+            
+        #pygame.draw.circle(pygame.display.get_surface(), Color(0,0,255,128), [250, 250], 30, 3)
         pygame.display.flip()
 
     
