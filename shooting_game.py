@@ -99,13 +99,18 @@ class Alien(pygame.sprite.Sprite):
         self.rect.midtop = (random.randint(self.area.left + self.rect.width//2, self.area.right - self.rect.width//2), self.area.top)
         self.initialRect = self.rect
         self.ExplosionType = ExplosionType
-        self.amp = random.randint(0,min(self.rect.x - self.area.left, self.area.right - self.rect.x - self.rect.width))
+        self.amp = random.randint(self.rect.width, self.area.width//2)
         self.freq = 1/20
         self.speed = 1
         self.moveFunc = lambda x: self.amp*math.sin(x*self.freq)
 
     def update(self):
-        self.rect = self.initialRect.move((self.moveFunc(self.loc), self.speed*self.loc))
+        horiz = self.moveFunc(self.loc)
+        if horiz + self.initialRect.x > 500:
+            horiz -= 500 + self.rect.width
+        elif horiz + self.initialRect.x < 0 - self.rect.width:
+            horiz += 500 + self.rect.width
+        self.rect = self.initialRect.move((horiz, self.speed*self.loc))
         self.loc = self.loc + 1
 
     def explode(self):
@@ -161,8 +166,7 @@ def main():
             elif (event.type == KEYDOWN
                 and event.key == K_SPACE):
                 newMissile = ship.fire() 
-                allsprites.add(newMissile)
-                missiles.add(newMissile)
+                newMissile.add(missiles, allsprites)
 
     #Collision Detection
         for alien in aliens:
