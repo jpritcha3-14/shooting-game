@@ -88,11 +88,18 @@ class BombPowerup(Powerup):
         Powerup.__init__(self, 'bomb')
         self.pType = 'bomb'
 
+class ShieldPowerup(Powerup):
+    def __init__(self):
+        Powerup.__init__(self, 'shield')
+        self.pType = 'shield'
+
 
 class Ship(pygame.sprite.Sprite):
     def __init__(self, MisType=Missile, ExplosionType=Explosion):
         pygame.sprite.Sprite.__init__(self)
         self.image, self.rect = load_image('ship.png', -1)
+        self.original = self.image
+        self.shield, self.rect = load_image('ship_shield.png', -1)
         self.screen = pygame.display.get_surface()
         self.area = self.screen.get_rect()
         self.rect.midbottom = (self.screen.get_width()//2, self.area.bottom)
@@ -102,6 +109,7 @@ class Ship(pygame.sprite.Sprite):
         self.ExplosionType = ExplosionType
         self.radius = max(self.rect.width, self.rect.height)
         self.alive = True
+        self.shieldUp = False
 
     def update(self):
         newpos = self.rect.move((self.horiz, self.vert))
@@ -119,6 +127,12 @@ class Ship(pygame.sprite.Sprite):
         elif not (newvert.top <= self.area.top
             or newvert.bottom >= self.area.bottom):
             self.rect = newvert
+
+        if self.shieldUp and self.image != self.shield:
+            self.image = self.shield 
+
+        if not self.shieldUp and self.image != self.original:
+            self.image = self.original
 
     def fire(self):
         return self.MisType(self) 
@@ -200,13 +214,16 @@ def main():
     clock = pygame.time.Clock()
     ship = Ship(Missile)
     alienTypes = (Siney, Spikey, Roundy)
+    powerupTypes = (BombPowerup, ShieldPowerup)
+    
     aliens = pygame.sprite.Group()
     missiles = pygame.sprite.Group() 
     bombs = pygame.sprite.Group()
-    explosions = pygame.sprite.Group()
     powerups = pygame.sprite.Group()
+    explosions = pygame.sprite.Group()
     alldrawings = pygame.sprite.Group()
     allsprites = pygame.sprite.RenderPlain((ship,))
+
     alienPeriod = 50
     curTime = 0 
     aliensOffScreen = 100 
@@ -222,9 +239,8 @@ def main():
         clock.tick(120)
         powerupTimeLeft -= 1
         if powerupTimeLeft <= 0:
-            print('powerup')
             powerupTimeLeft = powerupTime
-            BombPowerup().add(powerups, allsprites)
+            random.choice(powerupTypes)().add(powerups, allsprites)
             
 
     #Event Handling
@@ -270,13 +286,21 @@ def main():
                     aliensLeft -= 1
                     score += 1
             if pygame.sprite.collide_rect(alien, ship):
-                ship.explode().add(allsprites, explosions)
+                if ship.shieldUp:
+                    ship.shieldUp = False
+                    alien.explode().add(allsprites, explosions)
+                    aliensLeft -= 1
+                    score += 1
+                else:
+                    ship.explode().add(allsprites, explosions)
 
         #PowerUps
         for powerup in powerups:
             if pygame.sprite.collide_circle(powerup, ship):
                 if powerup.pType == 'bomb':
                     bombsHeld += 1
+                elif powerup.pType == 'shield':
+                    ship.shieldUp = True
                 powerup.kill()
             elif powerup.rect.top > powerup.area.bottom: 
                 powerup.kill()
