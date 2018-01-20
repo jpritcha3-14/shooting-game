@@ -151,7 +151,7 @@ class Spikey(Alien):
     def __init__(self):
         Alien.__init__(self, 'blue')
         self.slope = random.choice(list(x for x in range(-3,3) if x != 0))
-        self.period = random.choice(list(4*x for x in range(3,31)))
+        self.period = random.choice(list(4*x for x in range(10,41)))
         self.moveFunc = lambda: (self.slope*(self.loc % self.period) if self.loc % self.period < self.period // 2 else self.slope*self.period // 2 - self.slope*((self.loc % self.period) - self.period//2), 0)
                 
         
@@ -185,6 +185,11 @@ def main():
     curTime = 0 
     aliensOffScreen = 100 
     aliensLeft = aliensOffScreen
+    level = 1
+    bombsHeld = 3
+    score = 0
+    font = pygame.font.Font(None, 36)
+    
 
     while ship.alive:
         clock.tick(120)
@@ -209,9 +214,10 @@ def main():
                 newMissile.add(missiles, allsprites)
             elif (event.type == KEYDOWN
                 and event.key == K_b):
-                newBomb = ship.bomb() 
-                newBomb.add(bombs, alldrawings)
-
+                if bombsHeld > 0:
+                    bombsHeld -= 1 
+                    newBomb = ship.bomb() 
+                    newBomb.add(bombs, alldrawings)
 
     #Collision Detection
         for alien in aliens:
@@ -224,17 +230,18 @@ def main():
                 if pygame.sprite.collide_circle(bomb, alien):
                     alien.explode().add(allsprites, explosions)
                     aliensLeft -= 1
-                    print(aliensLeft)
+                    score += 1
 
             for missile in missiles:
                 if pygame.sprite.collide_rect(missile, alien):
                     alien.explode().add(allsprites, explosions)
                     missile.kill()
                     aliensLeft -= 1
-                    print(aliensLeft)
+                    score += 1
                     
             if pygame.sprite.collide_rect(alien, ship):
                 ship.explode().add(allsprites, explosions)
+
 
     #Update Aliens
         if curTime <= 0 and aliensOffScreen > 0:
@@ -243,14 +250,28 @@ def main():
             curTime = alienTime
         elif curTime > 0:
             curTime -= 1
+            
+    #Update text overlays
+        levelText = font.render("Level: "+str(level), 1, (0,0,255))
+        leftText = font.render("Aliens Left: "+str(aliensLeft), 1, (0,0,255))
+        scoreText = font.render("Score: "+str(score), 1, (0,0,255))
+        bombText = font.render("Bombs: "+str(bombsHeld), 1, (0,0,255))
+        
+        levelPos = levelText.get_rect(topleft=background.get_rect().topleft)
+        leftPos = leftText.get_rect(midtop=background.get_rect().midtop)
+        scorePos = scoreText.get_rect(topright=background.get_rect().topright)
+        bombPos = bombText.get_rect(bottomleft=background.get_rect().bottomleft)
 
+        textOverlays = zip([levelText, leftText, scoreText, bombText], 
+                           [levelPos, leftPos, scorePos, bombPos])
     
-
-    #Update and draw all sprites 
+    #Update and draw all sprites and text
         allsprites.update()
         screen.blit(background, (0,0))
         allsprites.draw(screen)
         alldrawings.update()
+        for text, textPos in textOverlays:
+            screen.blit(text, textPos)
         pygame.display.flip()
 
     
