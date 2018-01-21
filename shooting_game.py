@@ -193,6 +193,10 @@ class Spikey(Alien):
         self.period = random.choice(list(4*x for x in range(10,41)))
         self.moveFunc = lambda: (self.slope*(self.loc % self.period) if self.loc % self.period < self.period // 2 else self.slope*self.period // 2 - self.slope*((self.loc % self.period) - self.period//2), 0)
                 
+class Fasty(Alien):
+    def __init__(self):
+        Alien.__init__(self, 'white')
+        self.moveFunc = lambda: (0, 3*self.speed*self.loc)
         
 def main():
 #Initialize everything
@@ -213,7 +217,7 @@ def main():
 #Prepare game objects
     clock = pygame.time.Clock()
     ship = Ship(Missile)
-    alienTypes = (Siney, Spikey, Roundy)
+    alienTypes = (Siney, Spikey, Roundy, Fasty)
     powerupTypes = (BombPowerup, ShieldPowerup)
     
     aliens = pygame.sprite.Group()
@@ -335,7 +339,6 @@ def main():
         for text, textPos in textOverlays:
             screen.blit(text, textPos)
         pygame.display.flip()
-
     
     while True:
         clock.tick(120)
@@ -357,7 +360,6 @@ def main():
         alldrawings.update()
         pygame.display.flip()
 
-                
 if __name__ == '__main__':
     while(main()):
         pass
