@@ -228,23 +228,28 @@ def main():
     alldrawings = pygame.sprite.Group()
     allsprites = pygame.sprite.RenderPlain((ship,))
 
+    clockTime = 120
     alienPeriod = 50
     curTime = 0 
-    aliensOffScreen = 100 
-    aliensLeft = aliensOffScreen
-    level = 1
+    aliensThisWave, aliensLeft, aliensOffScreen = 10, 10, 10 
+    wave = 1
     bombsHeld = 3
     score = 0
-    powerupTime = 1000
+    powerupTime = 10*clockTime 
     powerupTimeLeft = powerupTime
+    betweenWaveTime = 5*clockTime 
+    betweenWaveCount = betweenWaveTime
     font = pygame.font.Font(None, 36)
 
     while ship.alive:
-        clock.tick(120)
-        powerupTimeLeft -= 1
+        clock.tick(clockTime)
+
+        if aliensLeft >= 20:
+            powerupTimeLeft -= 1
         if powerupTimeLeft <= 0:
             powerupTimeLeft = powerupTime
             random.choice(powerupTypes)().add(powerups, allsprites)
+
             
 
     #Event Handling
@@ -318,30 +323,49 @@ def main():
             curTime -= 1
             
     #Update text overlays
-        levelText = font.render("Level: "+str(level), 1, (0,0,255))
+        waveText = font.render("Wave: "+str(wave), 1, (0,0,255))
         leftText = font.render("Aliens Left: "+str(aliensLeft), 1, (0,0,255))
         scoreText = font.render("Score: "+str(score), 1, (0,0,255))
         bombText = font.render("Bombs: "+str(bombsHeld), 1, (0,0,255))
         
-        levelPos = levelText.get_rect(topleft=background.get_rect().topleft)
+        wavePos = waveText.get_rect(topleft=background.get_rect().topleft)
         leftPos = leftText.get_rect(midtop=background.get_rect().midtop)
         scorePos = scoreText.get_rect(topright=background.get_rect().topright)
         bombPos = bombText.get_rect(bottomleft=background.get_rect().bottomleft)
 
-        textOverlays = zip([levelText, leftText, scoreText, bombText], 
-                           [levelPos, leftPos, scorePos, bombPos])
+        text = [waveText, leftText, scoreText, bombText]
+        position = [wavePos, leftPos, scorePos, bombPos]
     
+    #Detertmine when to move to next wave
+        if aliensLeft <= 0:
+            if betweenWaveCount > 0:
+                betweenWaveCount -= 1
+                nextWaveText = font.render('Wave ' + str(wave+1), 1, (0,0,255))
+                nextWaveNum = font.render(str((betweenWaveCount // clockTime) + 1), 1, (0,0,255))
+                text.extend([nextWaveText, nextWaveNum])
+                nextWavePos = nextWaveText.get_rect(center=background.get_rect().center)
+                nextWaveNumPos = nextWaveNum.get_rect(midtop=nextWavePos.midbottom)
+                position.extend([nextWavePos, nextWaveNumPos])
+
+            else:
+                wave += 1
+                aliensLeft, aliensOffScreen, aliensThisWave = 3*[2*aliensThisWave]
+                betweenWaveCount = betweenWaveTime
+                
+        textOverlays = zip(text, position)
+
     #Update and draw all sprites and text
         allsprites.update()
         screen.blit(background, (0,0))
         allsprites.draw(screen)
         alldrawings.update()
-        for text, textPos in textOverlays:
-            screen.blit(text, textPos)
+        for txt, pos in textOverlays:
+            screen.blit(txt, pos)
         pygame.display.flip()
+
     
     while True:
-        clock.tick(120)
+        clock.tick(clockTime)
 
     #Event Handling
         for event in pygame.event.get():
