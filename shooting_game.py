@@ -163,10 +163,7 @@ class Alien(pygame.sprite.Sprite):
         screen = pygame.display.get_surface()
         self.area = screen.get_rect()
         self.loc = 0
-        self.rect.midtop = (random.randint(
-                            self.area.left + self.rect.width//2, 
-                            self.area.right - self.rect.width//2), self.area.top)
-        self.initialRect = self.rect
+        self.position()
         self.speed = 1
         self.radius = min(self.rect.width//2, self.rect.height//2) 
 
@@ -181,6 +178,13 @@ class Alien(pygame.sprite.Sprite):
         if self.rect.top > self.area.bottom: # Feels like this function needs to be inside the Alien class
             self.kill()
             self.observer.aliensOffScreen += 1
+    
+    def position(self):
+        self.rect.midtop = (random.randint(
+                            self.area.left + self.rect.width//2, 
+                            self.area.right - self.rect.width//2), self.area.top)
+        self.loc = 0
+        self.initialRect = self.rect
 
     def explode(self):
         self.kill()
@@ -215,20 +219,25 @@ class Fasty(Alien):
 class Crawly(Alien):
     def __init__(self, observer):
         Alien.__init__(self, 'yellow', observer)
-        self.startSide = random.choice((self.area.left, self.area.right))
-        self.rect.bottomleft = (self.startSide,
-                                random.randint((self.area.bottom*3)//4, self.area.bottom))
+        self.position()
         self.moveFunc = lambda: (self.speed*self.loc, 0)
         
     def update(self):
         horiz, vert = self.moveFunc()
-        horiz = -horiz if self.startSide == self.area.right else horiz
-        if (horiz + self.initialRect.x > self.area.right
-            or horiz + self.initialRect.x < self.area.left):
+        horiz = -horiz if self.initialRect.center[0] == self.area.right else horiz
+        if (horiz + self.initialRect.left > self.area.right
+            or horiz + self.initialRect.right < self.area.left):
             self.observer.aliensOffScreen += 1
             self.kill()
         self.rect = self.initialRect.move((horiz, vert))
         self.loc = self.loc + 1
+
+    def position(self):
+        self.rect.midbottom = (random.choice((self.area.left, self.area.right)),
+                              random.randint((self.area.bottom*3)//4, self.area.bottom))
+        self.initialRect = self.rect
+        self.loc = 0
+
 
 def main():
 #Initialize everything
@@ -251,6 +260,7 @@ def main():
     ship = Ship(Missile)
     observer = AlienObserver()
     alienTypes = (Siney, Spikey, Roundy, Fasty, Crawly)
+    #alienTypes = (Crawly,)
     powerupTypes = (BombPowerup, ShieldPowerup)
     
     aliens = pygame.sprite.Group()
