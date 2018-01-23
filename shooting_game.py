@@ -99,7 +99,6 @@ class ShieldPowerup(Powerup):
         Powerup.__init__(self, 'shield')
         self.pType = 'shield'
 
-
 class Ship(pygame.sprite.Sprite):
     def __init__(self, MisType=Missile, ExplosionType=Explosion):
         pygame.sprite.Sprite.__init__(self)
@@ -151,19 +150,17 @@ class Ship(pygame.sprite.Sprite):
         self.alive = False
         return self.ExplosionType(self)
 
-class AlienObserver(object):
-    def __init__(self):
-        self.aliensOffScreen = 0
 
 class Alien(pygame.sprite.Sprite):
-    def __init__(self, color, observer):
+    def __init__(self, color):
         pygame.sprite.Sprite.__init__(self)
-        self.observer = observer
         self.image, self.rect = load_image('space_invader_'+ color +'.png', -1)
         screen = pygame.display.get_surface()
         self.area = screen.get_rect()
         self.loc = 0
+        self.outOfBounds = False
         self.position()
+        self.initialRect = self.rect
         self.speed = 1
         self.radius = min(self.rect.width//2, self.rect.height//2) 
 
@@ -176,49 +173,48 @@ class Alien(pygame.sprite.Sprite):
         self.rect = self.initialRect.move((horiz, self.speed*self.loc + vert))
         self.loc = self.loc + 1
         if self.rect.top > self.area.bottom: # Feels like this function needs to be inside the Alien class
-            self.kill()
-            self.observer.aliensOffScreen += 1
+            self.outOfBounds = True
     
     def position(self):
         self.rect.midtop = (random.randint(
                             self.area.left + self.rect.width//2, 
                             self.area.right - self.rect.width//2), self.area.top)
         self.loc = 0
-        self.initialRect = self.rect
+        self.outOfBounds = False
 
     def explode(self):
         self.kill()
         return Explosion(self)
 
 class Siney(Alien):
-    def __init__(self, observer):
-        Alien.__init__(self, 'green', observer)
+    def __init__(self):
+        Alien.__init__(self, 'green')
         self.amp = random.randint(self.rect.width, 3*self.rect.width)
         self.freq = 1/20
         self.moveFunc = lambda: (self.amp*math.sin(self.loc*self.freq), 0)
 
 class Roundy(Alien):
-    def __init__(self, observer):
-        Alien.__init__(self, 'red', observer)
+    def __init__(self):
+        Alien.__init__(self, 'red')
         self.amp = random.randint(self.rect.width, 3*self.rect.width)
         self.freq = 1/20
         self.moveFunc = lambda: (self.amp*math.sin(self.loc*self.freq), self.amp*math.cos(self.loc*self.freq))
 
 class Spikey(Alien):
-    def __init__(self, observer):
-        Alien.__init__(self, 'blue', observer)
+    def __init__(self):
+        Alien.__init__(self, 'blue')
         self.slope = random.choice(list(x for x in range(-3,3) if x != 0))
         self.period = random.choice(list(4*x for x in range(10,41)))
         self.moveFunc = lambda: (self.slope*(self.loc % self.period) if self.loc % self.period < self.period // 2 else self.slope*self.period // 2 - self.slope*((self.loc % self.period) - self.period//2), 0)
                 
 class Fasty(Alien):
-    def __init__(self, observer):
-        Alien.__init__(self, 'white', observer)
+    def __init__(self):
+        Alien.__init__(self, 'white')
         self.moveFunc = lambda: (0, 3*self.speed*self.loc)
 
 class Crawly(Alien):
-    def __init__(self, observer):
-        Alien.__init__(self, 'yellow', observer)
+    def __init__(self):
+        Alien.__init__(self, 'yellow')
         self.position()
         self.moveFunc = lambda: (self.speed*self.loc, 0)
         
@@ -227,8 +223,7 @@ class Crawly(Alien):
         horiz = -horiz if self.initialRect.center[0] == self.area.right else horiz
         if (horiz + self.initialRect.left > self.area.right
             or horiz + self.initialRect.right < self.area.left):
-            self.observer.aliensOffScreen += 1
-            self.kill()
+            self.outOfBounds = True
         self.rect = self.initialRect.move((horiz, vert))
         self.loc = self.loc + 1
 
@@ -237,6 +232,7 @@ class Crawly(Alien):
                               random.randint((self.area.bottom*3)//4, self.area.bottom))
         self.initialRect = self.rect
         self.loc = 0
+        self.outOfBounds = False
 
 
 def main():
@@ -258,12 +254,12 @@ def main():
 #Prepare game objects
     clock = pygame.time.Clock()
     ship = Ship(Missile)
-    observer = AlienObserver()
     alienTypes = (Siney, Spikey, Roundy, Fasty, Crawly)
     #alienTypes = (Crawly,)
     powerupTypes = (BombPowerup, ShieldPowerup)
     
-    aliens = pygame.sprite.Group()
+    alienPool = pygame.sprite.Group([alien() for alien in alienTypes for _ in range(5)])
+    aliens = pygame.sprite.Group() 
     missiles = pygame.sprite.Group() 
     bombs = pygame.sprite.Group()
     powerups = pygame.sprite.Group()
@@ -274,7 +270,7 @@ def main():
     clockTime = 120 
     alienPeriod = clockTime//3 
     curTime = 0 
-    aliensThisWave, aliensLeft, observer.aliensOffScreen = 10, 10, 10 
+    aliensThisWave, aliensLeftThisWave, aliensOffScreen = 10, 10, 10 
     wave = 1
     bombsHeld = 3
     score = 0
@@ -284,16 +280,19 @@ def main():
     betweenWaveCount = betweenWaveTime
     font = pygame.font.Font(None, 36)
 
+    def killAlien(alien):
+        alien.explode().add(allsprites, explosions)
+        alien.remove(allsprites, aliens)
+        alien.add(alienPool)
+
     while ship.alive:
         clock.tick(clockTime)
 
-        if aliensLeft >= 20:
+        if aliensLeftThisWave >= 20:
             powerupTimeLeft -= 1
         if powerupTimeLeft <= 0:
             powerupTimeLeft = powerupTime
             random.choice(powerupTypes)().add(powerups, allsprites)
-
-            
 
     #Event Handling
         for event in pygame.event.get():
@@ -319,29 +318,33 @@ def main():
                     bombsHeld -= 1 
                     newBomb = ship.bomb() 
                     newBomb.add(bombs, alldrawings)
-
+    
     #Collision Detection
         #Aliens
         for alien in aliens:
             for bomb in bombs:
                 if pygame.sprite.collide_circle(bomb, alien):
-                    alien.explode().add(allsprites, explosions)
-                    aliensLeft -= 1
+                    killAlien(alien)
+                    aliensLeftThisWave -= 1
                     score += 1
             for missile in missiles:
                 if pygame.sprite.collide_rect(missile, alien):
-                    alien.explode().add(allsprites, explosions)
-                    missile.kill()
-                    aliensLeft -= 1
+                    killAlien(alien)
+                    aliensLeftThisWave -= 1
                     score += 1
+                    missile.kill()
             if pygame.sprite.collide_rect(alien, ship):
                 if ship.shieldUp:
-                    ship.shieldUp = False
-                    alien.explode().add(allsprites, explosions)
-                    aliensLeft -= 1
+                    killAlien(alien)
+                    aliensLeftThisWave -= 1
                     score += 1
+                    ship.shieldUp = False
                 else:
                     ship.explode().add(allsprites, explosions)
+            if alien.outOfBounds:
+                alien.add(alienPool)
+                alien.remove(allsprites,aliens)
+                aliensOffScreen += 1
 
         #PowerUps
         for powerup in powerups:
@@ -355,16 +358,20 @@ def main():
                 powerup.kill()
 
     #Update Aliens
-        if curTime <= 0 and observer.aliensOffScreen > 0:
-            random.choice(alienTypes)(observer).add(aliens, allsprites)
-            observer.aliensOffScreen -= 1
+        print(aliensOffScreen)
+        if curTime <= 0 and len(alienPool) and aliensOffScreen > 0 and aliensLeftThisWave > 0:
+            chosen = random.choice(alienPool.sprites())
+            chosen.position()
+            chosen.add(allsprites, aliens)
+            chosen.remove(alienPool)
+            aliensOffScreen -= 1
             curTime = alienPeriod
         elif curTime > 0:
             curTime -= 1
             
     #Update text overlays
         waveText = font.render("Wave: "+str(wave), 1, (0,0,255))
-        leftText = font.render("Aliens Left: "+str(aliensLeft), 1, (0,0,255))
+        leftText = font.render("Aliens Left: "+str(aliensLeftThisWave), 1, (0,0,255))
         scoreText = font.render("Score: "+str(score), 1, (0,0,255))
         bombText = font.render("Bombs: "+str(bombsHeld), 1, (0,0,255))
         
@@ -374,10 +381,10 @@ def main():
         bombPos = bombText.get_rect(bottomleft=background.get_rect().bottomleft)
 
         text = [waveText, leftText, scoreText, bombText]
-        position = [wavePos, leftPos, scorePos, bombPos]
+        textposition = [wavePos, leftPos, scorePos, bombPos]
     
     #Detertmine when to move to next wave
-        if aliensLeft <= 0:
+        if aliensLeftThisWave <= 0:
             if betweenWaveCount > 0:
                 betweenWaveCount -= 1
                 nextWaveText = font.render('Wave ' + str(wave+1) + ' in', 1, (0,0,255))
@@ -385,14 +392,13 @@ def main():
                 text.extend([nextWaveText, nextWaveNum])
                 nextWavePos = nextWaveText.get_rect(center=background.get_rect().center)
                 nextWaveNumPos = nextWaveNum.get_rect(midtop=nextWavePos.midbottom)
-                position.extend([nextWavePos, nextWaveNumPos])
-
-            else:
+                textposition.extend([nextWavePos, nextWaveNumPos])
+            elif betweenWaveCount == 0:
                 wave += 1
-                aliensLeft, observer.aliensOffScreen, aliensThisWave = 3*[2*aliensThisWave]
+                aliensLeftThisWave, aliensThisWave, aliensOffScreen = 3*[2*aliensThisWave]
                 betweenWaveCount = betweenWaveTime
                 
-        textOverlays = zip(text, position)
+        textOverlays = zip(text, textposition)
 
     #Update and draw all sprites and text
         allsprites.update()
