@@ -38,17 +38,21 @@ class Missile(pygame.sprite.Sprite):
     def __init__(self, ship):
         pygame.sprite.Sprite.__init__(self)
         self.image, self.rect = load_image('missile.png', -1)
-        self.rect.midbottom = ship.rect.midtop
+        self.outOfBounds = False
+        self.position(ship.rect.midtop)
         screen = pygame.display.get_surface()
         self.area = screen.get_rect()
         self.speed = -4
 
+    def position(self, loc):
+        self.rect.midbottom = loc
+        self.outOfBounds = False
+        
     def update(self):
         newpos = self.rect.move(0,self.speed)
-        if newpos.bottom > self.area.top:
-            self.rect = newpos
-        else:
-            self.kill()
+        self.rect = newpos
+        if self.rect.top < self.area.top:
+            self.outOfBounds = True
             
 class Bomb(pygame.sprite.Sprite):
     def __init__(self, ship):
@@ -100,7 +104,7 @@ class ShieldPowerup(Powerup):
         self.pType = 'shield'
 
 class Ship(pygame.sprite.Sprite):
-    def __init__(self, MisType=Missile, ExplosionType=Explosion):
+    def __init__(self):
         pygame.sprite.Sprite.__init__(self)
         self.image, self.rect = load_image('ship.png', -1)
         self.original = self.image
@@ -110,8 +114,6 @@ class Ship(pygame.sprite.Sprite):
         self.rect.midbottom = (self.screen.get_width()//2, self.area.bottom)
         self.vert = 0
         self.horiz = 0
-        self.MisType = MisType
-        self.ExplosionType = ExplosionType
         self.radius = max(self.rect.width, self.rect.height)
         self.alive = True
         self.shieldUp = False
@@ -139,16 +141,13 @@ class Ship(pygame.sprite.Sprite):
         if not self.shieldUp and self.image != self.original:
             self.image = self.original
 
-    def fire(self):
-        return self.MisType(self) 
-
     def bomb(self):
         return Bomb(self)
 
     def explode(self):
         self.kill()
         self.alive = False
-        return self.ExplosionType(self)
+        return Explosion(self)
 
 
 class Alien(pygame.sprite.Sprite):
@@ -253,13 +252,14 @@ def main():
     
 #Prepare game objects
     clock = pygame.time.Clock()
-    ship = Ship(Missile)
+    ship = Ship()
     alienTypes = (Siney, Spikey, Roundy, Fasty, Crawly)
     #alienTypes = (Crawly,)
     powerupTypes = (BombPowerup, ShieldPowerup)
     
     alienPool = pygame.sprite.Group([alien() for alien in alienTypes for _ in range(5)])
     aliens = pygame.sprite.Group() 
+    missilePool = pygame.sprite.Group([Missile(ship) for _ in range(10)])
     missiles = pygame.sprite.Group() 
     bombs = pygame.sprite.Group()
     powerups = pygame.sprite.Group()
@@ -310,8 +310,11 @@ def main():
                 ship.vert -= direction[event.key][1] 
             elif (event.type == KEYDOWN
                 and event.key == K_SPACE):
-                newMissile = ship.fire() 
-                newMissile.add(missiles, allsprites)
+                if len(missilePool) > 0:
+                    firedMissile = missilePool.sprites()[0] 
+                    firedMissile.position(ship.rect.midtop)
+                    firedMissile.remove(missilePool)
+                    firedMissile.add(missiles, allsprites)
             elif (event.type == KEYDOWN
                 and event.key == K_b):
                 if bombsHeld > 0:
@@ -332,7 +335,8 @@ def main():
                     killAlien(alien)
                     aliensLeftThisWave -= 1
                     score += 1
-                    missile.kill()
+                    missile.add(missilePool)
+                    missile.remove(allsprites, missiles)
             if pygame.sprite.collide_rect(alien, ship):
                 if ship.shieldUp:
                     killAlien(alien)
@@ -357,8 +361,13 @@ def main():
             elif powerup.rect.top > powerup.area.bottom: 
                 powerup.kill()
 
+        #Missiles
+        for missile in missiles:
+            if missile.outOfBounds:
+                missile.add(missilePool)
+                missile.remove(allsprites, missiles)
+
     #Update Aliens
-        print(aliensOffScreen)
         if curTime <= 0 and len(alienPool) and aliensOffScreen > 0 and aliensLeftThisWave > 0:
             chosen = random.choice(alienPool.sprites())
             chosen.position()
