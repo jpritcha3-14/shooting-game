@@ -23,16 +23,17 @@ def load_image(name, colorkey=None):
     return image, image.get_rect()
      
 class Explosion(pygame.sprite.Sprite):
-    def __init__(self, explodedThing, linger=30):
+    def __init__(self, linger=30):
         pygame.sprite.Sprite.__init__(self)
         self.image, self.rect = load_image('explosion.png', -1)
-        self.rect.center = explodedThing.rect.center 
         self.linger = linger
     
     def update(self):
         self.linger -= 1
-        if self.linger <= 0:
-            self.kill()
+
+    def position(self, loc):
+        self.rect.center = loc
+        self.linger = 30
 
 class Missile(pygame.sprite.Sprite):
     def __init__(self, ship):
@@ -103,6 +104,8 @@ class ShieldPowerup(Powerup):
         Powerup.__init__(self, 'shield')
         self.pType = 'shield'
 
+#direction = {None:(0,0), K_w:(0,-2), K_s:(0,2), K_a:(-2,0), K_d:(2,0)}
+
 class Ship(pygame.sprite.Sprite):
     def __init__(self):
         pygame.sprite.Sprite.__init__(self)
@@ -112,11 +115,27 @@ class Ship(pygame.sprite.Sprite):
         self.screen = pygame.display.get_surface()
         self.area = self.screen.get_rect()
         self.rect.midbottom = (self.screen.get_width()//2, self.area.bottom)
-        self.vert = 0
-        self.horiz = 0
         self.radius = max(self.rect.width, self.rect.height)
         self.alive = True
         self.shieldUp = False
+        self.vert = 0
+        self.horiz = 0
+        self.checkKeys()
+
+    def checkKeys(self):
+        keyState = pygame.key.get_pressed()
+        if keyState[K_w]:
+            print('w')
+            self.vert -= 4
+        if keyState[K_s]:
+            print('s')
+            self.vert += 4
+        if keyState[K_a]:
+            print('a')
+            self.horiz -= 4
+        if keyState[K_d]:
+            print('d')
+            self.horiz += 4
 
     def update(self):
         newpos = self.rect.move((self.horiz, self.vert))
@@ -143,11 +162,6 @@ class Ship(pygame.sprite.Sprite):
 
     def bomb(self):
         return Bomb(self)
-
-    def explode(self):
-        self.kill()
-        self.alive = False
-        return Explosion(self)
 
 
 class Alien(pygame.sprite.Sprite):
@@ -181,10 +195,6 @@ class Alien(pygame.sprite.Sprite):
         self.loc = 0
         self.outOfBounds = False
 
-    def explode(self):
-        self.kill()
-        return Explosion(self)
-
 class Siney(Alien):
     def __init__(self):
         Alien.__init__(self, 'green')
@@ -195,7 +205,7 @@ class Siney(Alien):
 class Roundy(Alien):
     def __init__(self):
         Alien.__init__(self, 'red')
-        self.amp = random.randint(self.rect.width, 3*self.rect.width)
+        self.amp = random.randint(self.rect.width, 2*self.rect.width)
         self.freq = 1/20
         self.moveFunc = lambda: (self.amp*math.sin(self.loc*self.freq), self.amp*math.cos(self.loc*self.freq))
 
@@ -253,6 +263,7 @@ def main():
 #Prepare game objects
     clock = pygame.time.Clock()
     ship = Ship()
+    print(ship.vert, ship.horiz) 
     alienTypes = (Siney, Spikey, Roundy, Fasty, Crawly)
     #alienTypes = (Crawly,)
     powerupTypes = (BombPowerup, ShieldPowerup)
@@ -263,12 +274,13 @@ def main():
     missiles = pygame.sprite.Group() 
     bombs = pygame.sprite.Group()
     powerups = pygame.sprite.Group()
+    explosionPool = pygame.sprite.Group([Explosion() for _ in range(10)])
     explosions = pygame.sprite.Group()
     alldrawings = pygame.sprite.Group()
     allsprites = pygame.sprite.RenderPlain((ship,))
 
     clockTime = 120 
-    alienPeriod = clockTime//3 
+    alienPeriod = clockTime//2 
     curTime = 0 
     aliensThisWave, aliensLeftThisWave, aliensOffScreen = 10, 10, 10 
     wave = 1
@@ -280,10 +292,22 @@ def main():
     betweenWaveCount = betweenWaveTime
     font = pygame.font.Font(None, 36)
 
+    def explode(thing):
+        if len(explosionPool) > 0:
+            newExplosion = explosionPool.sprites()[0]
+            newExplosion.position(thing.rect.center)
+            newExplosion.add(allsprites, explosions)
+            newExplosion.remove(explosionPool)
+
     def killAlien(alien):
-        alien.explode().add(allsprites, explosions)
         alien.remove(allsprites, aliens)
         alien.add(alienPool)
+        explode(alien)
+
+    def killShip():
+        ship.alive = False
+        ship.remove(allsprites)
+        explode(ship)
 
     while ship.alive:
         clock.tick(clockTime)
@@ -302,10 +326,12 @@ def main():
                 return 
             elif (event.type == KEYDOWN 
                 and event.key in direction.keys()):
+                print('keydown')
                 ship.horiz += direction[event.key][0] 
                 ship.vert += direction[event.key][1] 
             elif (event.type == KEYUP 
                 and event.key in direction.keys()):
+                print('keyup', ship.horiz, ship.vert)
                 ship.horiz -= direction[event.key][0] 
                 ship.vert -= direction[event.key][1] 
             elif (event.type == KEYDOWN
@@ -344,7 +370,7 @@ def main():
                     score += 1
                     ship.shieldUp = False
                 else:
-                    ship.explode().add(allsprites, explosions)
+                    killShip()
             if alien.outOfBounds:
                 alien.add(alienPool)
                 alien.remove(allsprites,aliens)
@@ -366,6 +392,12 @@ def main():
             if missile.outOfBounds:
                 missile.add(missilePool)
                 missile.remove(allsprites, missiles)
+
+        #Explosions
+        for explosion in explosions:
+            if explosion.linger < 0:
+                explosion.add(explosionPool)
+                explosion.remove(allsprites, explosions)
 
     #Update Aliens
         if curTime <= 0 and len(alienPool) and aliensOffScreen > 0 and aliensLeftThisWave > 0:
@@ -438,6 +470,12 @@ def main():
         allsprites.draw(screen)
         alldrawings.update()
         pygame.display.flip()
+
+        for explosion in explosions:
+            if explosion.linger < 0:
+                explosion.remove(allsprites, explosions)
+                explosion.add(explosionPool)
+
 
 if __name__ == '__main__':
     while(main()):
