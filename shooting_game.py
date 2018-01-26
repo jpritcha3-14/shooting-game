@@ -28,7 +28,7 @@ class Explosion(pygame.sprite.Sprite):
     allsprites = None
     
     def __init__(self, linger=30):
-        pygame.sprite.Sprite.__init__(self)
+        super().__init__()
         self.image, self.rect = load_image('explosion.png', -1)
         self.linger = linger
     
@@ -53,7 +53,7 @@ class Missile(pygame.sprite.Sprite):
     allsprites = None
 
     def __init__(self):
-        pygame.sprite.Sprite.__init__(self)
+        super().__init__()
         self.image, self.rect = load_image('missile.png', -1)
         screen = pygame.display.get_surface()
         self.area = screen.get_rect()
@@ -80,7 +80,7 @@ class Missile(pygame.sprite.Sprite):
             
 class Bomb(pygame.sprite.Sprite):
     def __init__(self, ship):
-        pygame.sprite.Sprite.__init__(self)
+        super().__init__()
         self.image = None
         screen = pygame.display.get_surface()
         self.area = screen.get_rect()
@@ -99,7 +99,7 @@ class Bomb(pygame.sprite.Sprite):
 
 class Powerup(pygame.sprite.Sprite):
     def __init__(self, kindof):
-        pygame.sprite.Sprite.__init__(self)
+        super().__init__()
         self.image, self.rect = load_image(kindof + '_powerup.png', -1)
         self.original = self.image
         screen = pygame.display.get_surface()
@@ -119,17 +119,17 @@ class Powerup(pygame.sprite.Sprite):
 
 class BombPowerup(Powerup):
     def __init__(self):
-        Powerup.__init__(self, 'bomb')
+        super().__init__('bomb')
         self.pType = 'bomb'
 
 class ShieldPowerup(Powerup):
     def __init__(self):
-        Powerup.__init__(self, 'shield')
+        super().__init__('shield')
         self.pType = 'shield'
 
 class Ship(pygame.sprite.Sprite):
     def __init__(self):
-        pygame.sprite.Sprite.__init__(self)
+        super().__init__()
         self.image, self.rect = load_image('ship.png', -1)
         self.original = self.image
         self.shield, self.rect = load_image('ship_shield.png', -1)
@@ -186,7 +186,7 @@ class Alien(pygame.sprite.Sprite):
     allsprites = None
 
     def __init__(self, color):
-        pygame.sprite.Sprite.__init__(self)
+        super().__init__()
         self.image, self.rect = load_image('space_invader_'+ color +'.png', -1)
         self.initialRect = self.rect
         screen = pygame.display.get_surface()
@@ -229,33 +229,33 @@ class Alien(pygame.sprite.Sprite):
 
 class Siney(Alien):
     def __init__(self):
-        Alien.__init__(self, 'green')
+        super().__init__('green')
         self.amp = random.randint(self.rect.width, 3*self.rect.width)
         self.freq = 1/20
         self.moveFunc = lambda: (self.amp*math.sin(self.loc*self.freq), 0)
 
 class Roundy(Alien):
     def __init__(self):
-        Alien.__init__(self, 'red')
+        super().__init__('red')
         self.amp = random.randint(self.rect.width, 2*self.rect.width)
         self.freq = 1/20
         self.moveFunc = lambda: (self.amp*math.sin(self.loc*self.freq), self.amp*math.cos(self.loc*self.freq))
 
 class Spikey(Alien):
     def __init__(self):
-        Alien.__init__(self, 'blue')
+        super().__init__('blue')
         self.slope = random.choice(list(x for x in range(-3,3) if x != 0))
         self.period = random.choice(list(4*x for x in range(10,41)))
         self.moveFunc = lambda: (self.slope*(self.loc % self.period) if self.loc % self.period < self.period // 2 else self.slope*self.period // 2 - self.slope*((self.loc % self.period) - self.period//2), 0)
                 
 class Fasty(Alien):
     def __init__(self):
-        Alien.__init__(self, 'white')
+        super().__init__('white')
         self.moveFunc = lambda: (0, 3*self.speed*self.loc)
 
 class Crawly(Alien):
     def __init__(self):
-        Alien.__init__(self, 'yellow')
+        super().__init__('yellow')
         self.moveFunc = lambda: (self.speed*self.loc, 0)
         
     def update(self):
@@ -275,10 +275,21 @@ def main():
     pygame.display.set_caption('Shooting Game')
     pygame.mouse.set_visible(0)
 
-#Create the background
-    background = pygame.Surface(screen.get_size())
+#Create the background which will scroll and loop over a set of different size stars
+    background = pygame.Surface((500, 2000))
     background = background.convert()
     background.fill((0, 0, 0))
+    backgroundLoc = 1500 
+    finalStars = deque()
+    for y in range(0,1500,30):
+        size = random.randint(2,5)
+        x = random.randint(0,500-size)
+        if y <= 500:
+            finalStars.appendleft((x, y+1500, size))
+        pygame.draw.rect(background, (255, 255, 0), pygame.Rect(x,y,size,size))
+    while finalStars:
+        x, y, size = finalStars.pop()
+        pygame.draw.rect(background, (255, 255, 0), pygame.Rect(x,y,size,size))
 
 #Display the background
     screen.blit(background, (0, 0))
@@ -406,10 +417,10 @@ def main():
         scoreText = font.render("Score: "+str(score), 1, (0,0,255))
         bombText = font.render("Bombs: "+str(bombsHeld), 1, (0,0,255))
         
-        wavePos = waveText.get_rect(topleft=background.get_rect().topleft)
-        leftPos = leftText.get_rect(midtop=background.get_rect().midtop)
-        scorePos = scoreText.get_rect(topright=background.get_rect().topright)
-        bombPos = bombText.get_rect(bottomleft=background.get_rect().bottomleft)
+        wavePos = waveText.get_rect(topleft=screen.get_rect().topleft)
+        leftPos = leftText.get_rect(midtop=screen.get_rect().midtop)
+        scorePos = scoreText.get_rect(topright=screen.get_rect().topright)
+        bombPos = bombText.get_rect(bottomleft=screen.get_rect().bottomleft)
 
         text = [waveText, leftText, scoreText, bombText]
         textposition = [wavePos, leftPos, scorePos, bombPos]
@@ -421,7 +432,7 @@ def main():
                 nextWaveText = font.render('Wave ' + str(wave+1) + ' in', 1, (0,0,255))
                 nextWaveNum = font.render(str((betweenWaveCount // clockTime) + 1), 1, (0,0,255))
                 text.extend([nextWaveText, nextWaveNum])
-                nextWavePos = nextWaveText.get_rect(center=background.get_rect().center)
+                nextWavePos = nextWaveText.get_rect(center=screen.get_rect().center)
                 nextWaveNumPos = nextWaveNum.get_rect(midtop=nextWavePos.midbottom)
                 textposition.extend([nextWavePos, nextWaveNumPos])
             elif betweenWaveCount == 0:
@@ -432,8 +443,11 @@ def main():
         textOverlays = zip(text, textposition)
 
     #Update and draw all sprites and text
+        screen.blit(background, (0,0), area=pygame.Rect(0,backgroundLoc,500,500))
+        backgroundLoc -= 1
+        if backgroundLoc == 0:
+            backgroundLoc = 1500
         allsprites.update()
-        screen.blit(background, (0,0))
         allsprites.draw(screen)
         alldrawings.update()
         for txt, pos in textOverlays:
@@ -456,10 +470,16 @@ def main():
                 return True
 
     #Update and draw all sprites 
+        screen.blit(background, (0,0), area=pygame.Rect(0,backgroundLoc,500,500))
+        backgroundLoc -= 1
+        if backgroundLoc == 0:
+            backgroundLoc = 1500
         allsprites.update()
-        screen.blit(background, (0,0))
         allsprites.draw(screen)
         alldrawings.update()
+        gameOverText = font.render('GAME OVER', 1, (0,0,255))
+        gameOverPos = gameOverText.get_rect(center=screen.get_rect().center)
+        screen.blit(gameOverText, gameOverPos)
         pygame.display.flip()
 
 if __name__ == '__main__':
