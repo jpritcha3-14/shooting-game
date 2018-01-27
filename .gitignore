@@ -1,3 +1,4 @@
 *.xcf
 */old
 */assets
+*.db
