@@ -141,18 +141,17 @@ class Ship(pygame.sprite.Sprite):
         self.shieldUp = False
         self.vert = 0
         self.horiz = 0
-        self.checkKeys()
 
-    def checkKeys(self):
+    def initializeKeys(self):
         keyState = pygame.key.get_pressed()
         if keyState[K_w]:
-            self.vert -= 4
+            self.vert -= 2
         if keyState[K_s]:
-            self.vert += 4
+            self.vert += 2
         if keyState[K_a]:
-            self.horiz -= 4
+            self.horiz -= 2
         if keyState[K_d]:
-            self.horiz += 4
+            self.horiz += 2
 
     def update(self):
         newpos = self.rect.move((self.horiz, self.vert))
@@ -329,10 +328,49 @@ def main():
     betweenWaveCount = betweenWaveTime
     font = pygame.font.Font(None, 36)
 
-    def killShip():
-        ship.alive = False
-        ship.remove(allsprites)
-        Explosion.position(ship.rect.center)
+    inMenu = True
+    hiScoreText = font.render('HIGH SCORES', 1, (0,0,255))
+    hiScorePos = hiScoreText.get_rect(center=screen.get_rect().center)
+    startText = font.render('START GAME', 1, (0,0,255))
+    startPos = startText.get_rect(bottomleft=hiScorePos.topleft)
+    quitText = font.render('QUIT', 1, (0,0,255))
+    quitPos = quitText.get_rect(topleft=hiScorePos.bottomleft)
+    selectText = font.render('*', 1, (0,0,255))
+    selectPos = selectText.get_rect(topright=startPos.topleft)
+    menuDict = {1:startPos, 2:hiScorePos, 3:quitPos}
+    selection = 1
+
+    while inMenu:
+        clock.tick(clockTime)
+
+        screen.blit(background, (0,0), area=pygame.Rect(0,backgroundLoc,500,500))
+        backgroundLoc -= 1
+        if backgroundLoc == 0:
+            backgroundLoc = 1500
+
+        for event in pygame.event.get():
+            if (event.type == QUIT
+                or event.type == KEYDOWN
+                and event.key == K_SPACE
+                and selection == 3):
+                return
+            elif (event.type == KEYDOWN and event.key == K_SPACE):
+                if selection == 1:
+                    inMenu = False
+                    ship.initializeKeys()
+            elif (event.type == KEYDOWN and event.key == K_w and selection > 1):
+                selection -= 1
+            elif (event.type == KEYDOWN and event.key == K_s and selection < len(menuDict)):
+                selection += 1
+
+        selectPos = selectText.get_rect(topright=menuDict[selection].topleft)
+
+        textOverlays = zip([startText, hiScoreText, quitText, selectText],
+                           [startPos, hiScorePos, quitPos, selectPos])
+        for txt, pos in textOverlays:
+            screen.blit(txt, pos)
+        pygame.display.flip()
+
 
     while ship.alive:
         clock.tick(clockTime)
@@ -391,7 +429,9 @@ def main():
                     score += 1
                     ship.shieldUp = False
                 else:
-                    killShip()
+                    ship.alive = False
+                    ship.remove(allsprites)
+                    Explosion.position(ship.rect.center)
 
         #PowerUps
         for powerup in powerups:
