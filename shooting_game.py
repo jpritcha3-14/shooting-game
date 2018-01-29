@@ -3,6 +3,9 @@ from collections import deque
 from pygame.locals import *
 from pygame.compat import geterror
 
+if not pygame.mixer: print ('Warning, sound disabled')
+if not pygame.font: print ('Warning, fonts disabled')
+
 BLUE = (0, 0, 255)
 RED = (255, 0, 0)
 
@@ -10,6 +13,20 @@ direction = {None:(0,0), K_w:(0,-2), K_s:(0,2), K_a:(-2,0), K_d:(2,0)}
 
 main_dir = os.path.split(os.path.abspath(__file__))[0]
 data_dir = os.path.join(main_dir, 'data')
+
+def load_sound(name):
+    class NoneSound:
+        def play(self): pass
+    if not pygame.mixer or not pygame.mixer.get_init():
+        return NoneSound()
+    fullname = os.path.join(data_dir, name)
+    try:
+        sound = pygame.mixer.Sound(fullname)
+    except pygame.error:
+        print ('Cannot load sound: %s' % fullname)
+        #raise SystemExit(str(geterror()))
+        raise SystemExit('filed to load ', name)
+    return sound
 
 def load_image(name, colorkey=None):
     fullname = os.path.join(data_dir, name)
@@ -24,16 +41,18 @@ def load_image(name, colorkey=None):
             colorkey = image.get_at((0,0))
         image.set_colorkey(colorkey, RLEACCEL)
     return image, image.get_rect()
+
+class MasterSprite(pygame.sprite.Sprite):
+    allsprites = None
      
-class Explosion(pygame.sprite.Sprite):
+class Explosion(MasterSprite):
     pool = pygame.sprite.Group()
     active = pygame.sprite.Group()
-    allsprites = None
     
-    def __init__(self, linger=30):
+    def __init__(self, speed):
         super().__init__()
         self.image, self.rect = load_image('explosion.png', -1)
-        self.linger = linger
+        self.linger = speed*3 
     
     @classmethod
     def position(cls, loc):
@@ -42,7 +61,7 @@ class Explosion(pygame.sprite.Sprite):
             explosion.add(cls.active, cls.allsprites)
             explosion.remove(cls.pool)
             explosion.rect.center = loc
-            explosion.linger = 30
+            explosion.linger = 12 
 
     def update(self):
         self.linger -= 1
@@ -50,17 +69,16 @@ class Explosion(pygame.sprite.Sprite):
             self.remove(self.allsprites, self.active)
             self.add(self.pool)
 
-class Missile(pygame.sprite.Sprite):
+class Missile(MasterSprite):
     pool = pygame.sprite.Group()
     active = pygame.sprite.Group()
-    allsprites = None
 
-    def __init__(self):
+    def __init__(self, speed):
         super().__init__()
         self.image, self.rect = load_image('missile.png', -1)
         screen = pygame.display.get_surface()
         self.area = screen.get_rect()
-        self.speed = -4
+        self.speed = -4*speed
 
     @classmethod
     def position(cls, loc):
@@ -131,7 +149,7 @@ class ShieldPowerup(Powerup):
         self.pType = 'shield'
 
 class Ship(pygame.sprite.Sprite):
-    def __init__(self):
+    def __init__(self, speed):
         super().__init__()
         self.image, self.rect = load_image('ship.png', -1)
         self.original = self.image
@@ -144,17 +162,18 @@ class Ship(pygame.sprite.Sprite):
         self.shieldUp = False
         self.vert = 0
         self.horiz = 0
+        self.speed = speed
 
     def initializeKeys(self):
         keyState = pygame.key.get_pressed()
         if keyState[K_w]:
-            self.vert -= 2
+            self.vert -= 2*speed
         if keyState[K_s]:
-            self.vert += 2
+            self.vert += 2*speed
         if keyState[K_a]:
-            self.horiz -= 2
+            self.horiz -= 2*speed
         if keyState[K_d]:
-            self.horiz += 2
+            self.horiz += 2*speed
 
     def update(self):
         newpos = self.rect.move((self.horiz, self.vert))
@@ -182,19 +201,18 @@ class Ship(pygame.sprite.Sprite):
     def bomb(self):
         return Bomb(self)
 
-class Alien(pygame.sprite.Sprite):
+class Alien(MasterSprite):
     pool = pygame.sprite.Group()
     active = pygame.sprite.Group()
-    allsprites = None
 
-    def __init__(self, color):
+    def __init__(self, color, speed):
         super().__init__()
         self.image, self.rect = load_image('space_invader_'+ color +'.png', -1)
         self.initialRect = self.rect
         screen = pygame.display.get_surface()
         self.area = screen.get_rect()
         self.loc = 0
-        self.speed = 1
+        self.speed = speed 
         self.radius = min(self.rect.width//2, self.rect.height//2) 
 
     @classmethod
@@ -219,8 +237,8 @@ class Alien(pygame.sprite.Sprite):
             horiz -= 500 + self.rect.width
         elif horiz + self.initialRect.x < 0 - self.rect.width:
             horiz += 500 + self.rect.width
-        self.rect = self.initialRect.move((horiz, self.speed*self.loc + vert))
-        self.loc = self.loc + 1
+        self.rect = self.initialRect.move((horiz, self.loc + vert))
+        self.loc = self.loc + self.speed 
         if self.rect.top > self.area.bottom:
             self.table()
             Alien.numOffScreen += 1
@@ -230,35 +248,35 @@ class Alien(pygame.sprite.Sprite):
         self.add(self.pool)
 
 class Siney(Alien):
-    def __init__(self):
-        super().__init__('green')
+    def __init__(self, speed):
+        super().__init__('green', speed)
         self.amp = random.randint(self.rect.width, 3*self.rect.width)
-        self.freq = 1/20
+        self.freq = (1/20)
         self.moveFunc = lambda: (self.amp*math.sin(self.loc*self.freq), 0)
 
 class Roundy(Alien):
-    def __init__(self):
-        super().__init__('red')
+    def __init__(self, speed):
+        super().__init__('red', speed)
         self.amp = random.randint(self.rect.width, 2*self.rect.width)
-        self.freq = 1/20
+        self.freq = 1/(20)
         self.moveFunc = lambda: (self.amp*math.sin(self.loc*self.freq), self.amp*math.cos(self.loc*self.freq))
 
 class Spikey(Alien):
-    def __init__(self):
-        super().__init__('blue')
+    def __init__(self, speed):
+        super().__init__('blue', speed)
         self.slope = random.choice(list(x for x in range(-3,3) if x != 0))
         self.period = random.choice(list(4*x for x in range(10,41)))
         self.moveFunc = lambda: (self.slope*(self.loc % self.period) if self.loc % self.period < self.period // 2 else self.slope*self.period // 2 - self.slope*((self.loc % self.period) - self.period//2), 0)
                 
 class Fasty(Alien):
-    def __init__(self):
-        super().__init__('white')
-        self.moveFunc = lambda: (0, 3*self.speed*self.loc)
+    def __init__(self, speed):
+        super().__init__('white', speed)
+        self.moveFunc = lambda: (0, 3*self.loc)
 
 class Crawly(Alien):
-    def __init__(self):
-        super().__init__('yellow')
-        self.moveFunc = lambda: (self.speed*self.loc, 0)
+    def __init__(self, speed):
+        super().__init__('yellow', speed)
+        self.moveFunc = lambda: (self.loc, 0)
         
     def update(self):
         horiz, vert = self.moveFunc()
@@ -268,11 +286,31 @@ class Crawly(Alien):
             self.table()
             Alien.numOffScreen += 1
         self.rect = self.initialRect.move((horiz, vert))
-        self.loc = self.loc + 1
+        self.loc = self.loc + self.speed 
 
 class Database(object):
     path = os.path.join(data_dir, 'hiScores.db')
     numScores = 15
+
+    @staticmethod
+    def getSound():
+        conn = sqlite3.connect(Database.path)
+        c = conn.cursor()
+        c.execute('''CREATE TABLE if not exists sound 
+                     (setting integer)''')
+        c.execute("SELECT * FROM sound")
+        setting = c.fetchall()
+        conn.close()
+        return setting[0][0] if len(setting) > 0 else 0
+
+    @staticmethod
+    def setSound(setting):
+        conn = sqlite3.connect(Database.path)
+        c = conn.cursor()
+        c.execute("DELETE FROM sound")
+        c.execute("INSERT INTO sound VALUES (?)", (setting,))
+        conn.commit()
+        conn.close()
 
     @staticmethod
     def getScores():
@@ -308,6 +346,8 @@ class Keyboard(object):
             
 def main():
 #Initialize everything
+
+    pygame.mixer.pre_init(11025, -16, 2, 512)
     pygame.init()
     screen = pygame.display.set_mode((500,500))
     pygame.display.set_caption('Shooting Game')
@@ -334,26 +374,32 @@ def main():
     pygame.display.flip()
     
 #Prepare game objects
+    speed = 2 
+    clockTime = 60  #maximum FPS 
     clock = pygame.time.Clock()
-    ship = Ship()
+    ship = Ship(speed)
     alienTypes = (Siney, Spikey, Roundy, Fasty, Crawly)
     powerupTypes = (BombPowerup, ShieldPowerup)
     
+    #Sprite groups 
     alldrawings = pygame.sprite.Group()
     allsprites = pygame.sprite.RenderPlain((ship,))
-    Alien.pool = pygame.sprite.Group([alien() for alien in alienTypes for _ in range(5)])
+    MasterSprite.allsprites = allsprites
+    Alien.pool = pygame.sprite.Group([alien(speed) for alien in alienTypes for _ in range(5)])
     Alien.active = pygame.sprite.Group() 
-    Alien.allsprites = allsprites
-    Missile.pool = pygame.sprite.Group([Missile() for _ in range(10)])
+    Missile.pool = pygame.sprite.Group([Missile(speed) for _ in range(10)])
     Missile.active = pygame.sprite.Group()
-    Missile.allsprites = allsprites
-    Explosion.pool = pygame.sprite.Group([Explosion() for _ in range(10)])
+    Explosion.pool = pygame.sprite.Group([Explosion(speed) for _ in range(10)])
     Explosion.active = pygame.sprite.Group()
-    Explosion.allsprites = allsprites
     bombs = pygame.sprite.Group()
     powerups = pygame.sprite.Group()
-
-    clockTime = 120 
+    
+    #Sounds
+    missile_sound = load_sound('missile.ogg')
+    bomb_sound = load_sound('bomb.ogg')
+    alien_explode_sound = load_sound('alien_explode.ogg')
+    ship_explode_sound = load_sound('ship_explode.ogg')
+    
     alienPeriod = clockTime//2 
     curTime = 0 
     aliensThisWave, aliensLeftThisWave, Alien.numOffScreen = 10, 10, 10 
@@ -383,27 +429,31 @@ def main():
     hiScorePos = hiScoreText.get_rect(center=screen.get_rect().center)
     startText = font.render('START GAME', 1, BLUE)
     startPos = startText.get_rect(bottomleft=hiScorePos.topleft)
+    soundText = font.render('SOUND FX ', 1, BLUE)
+    soundPos = soundText.get_rect(topleft=hiScorePos.bottomleft)
+    onText = font.render('ON', 1, RED)
+    offText = font.render('OFF', 1, RED)
+    onPos = onText.get_rect(topleft=soundPos.topright)
+    offPos = offText.get_rect(topleft=soundPos.topright)
     quitText = font.render('QUIT', 1, BLUE)
-    quitPos = quitText.get_rect(topleft=hiScorePos.bottomleft)
+    quitPos = quitText.get_rect(topleft=soundPos.bottomleft)
     selectText = font.render('*', 1, BLUE)
     selectPos = selectText.get_rect(topright=startPos.topleft)
-    menuDict = {1:startPos, 2:hiScorePos, 3:quitPos}
+    menuDict = {1:startPos, 2:hiScorePos, 3:soundPos, 4:quitPos}
     selection = 1
     showHiScores = False
+    soundFX = Database.getSound()
 
     while inMenu:
         clock.tick(clockTime)
 
         screen.blit(background, (0,0), area=pygame.Rect(0,backgroundLoc,500,500))
-        backgroundLoc -= 1
+        backgroundLoc -= speed
         if backgroundLoc == 0:
             backgroundLoc = 1500
 
         for event in pygame.event.get():
-            if (event.type == QUIT
-                or event.type == KEYDOWN
-                and event.key == K_RETURN
-                and selection == 3):
+            if (event.type == QUIT):
                 return
             elif (event.type == KEYDOWN and event.key == K_RETURN):
                 if showHiScores:
@@ -413,6 +463,11 @@ def main():
                     ship.initializeKeys()
                 elif selection == 2:
                     showHiScores = True
+                elif selection == 3:
+                    soundFX = not soundFX
+                    Database.setSound(int(soundFX))
+                elif selection == 4:
+                    return
             elif (event.type == KEYDOWN and event.key == K_w and selection > 1 and not showHiScores):
                 selection -= 1
             elif (event.type == KEYDOWN and event.key == K_s and selection < len(menuDict) and not showHiScores):
@@ -423,8 +478,8 @@ def main():
         if showHiScores:
             textOverlays = zip(highScoreTexts, highScorePos) 
         else:
-            textOverlays = zip([startText, hiScoreText, quitText, selectText],
-                               [startPos, hiScorePos, quitPos, selectPos])
+            textOverlays = zip([startText, hiScoreText, soundText, quitText, selectText, onText if soundFX else offText],
+                               [startPos, hiScorePos, soundPos, quitPos, selectPos, onPos if soundFX else offPos])
         for txt, pos in textOverlays:
             screen.blit(txt, pos)
         pygame.display.flip()
@@ -447,22 +502,26 @@ def main():
                 return 
             elif (event.type == KEYDOWN 
                 and event.key in direction.keys()):
-                ship.horiz += direction[event.key][0] 
-                ship.vert += direction[event.key][1] 
+                ship.horiz += direction[event.key][0]*speed
+                ship.vert += direction[event.key][1]*speed
             elif (event.type == KEYUP 
                 and event.key in direction.keys()):
-                ship.horiz -= direction[event.key][0] 
-                ship.vert -= direction[event.key][1] 
+                ship.horiz -= direction[event.key][0]*speed
+                ship.vert -= direction[event.key][1]*speed
             elif (event.type == KEYDOWN
                 and event.key == K_SPACE):
                 Missile.position(ship.rect.midtop)
                 missilesFired += 1
+                if soundFX:
+                    missile_sound.play()
             elif (event.type == KEYDOWN
                 and event.key == K_b):
                 if bombsHeld > 0:
                     bombsHeld -= 1 
                     newBomb = ship.bomb() 
                     newBomb.add(bombs, alldrawings)
+                    if soundFX:
+                        bomb_sound.play()
     
     #Collision Detection
         #Aliens
@@ -474,6 +533,8 @@ def main():
                     missilesFired += 1
                     aliensLeftThisWave -= 1
                     score += 1
+                    if soundFX:
+                        alien_explode_sound.play()
             for missile in Missile.active:
                 if pygame.sprite.collide_rect(missile, alien):
                     alien.table()
@@ -481,17 +542,22 @@ def main():
                     Explosion.position(alien.rect.center)
                     aliensLeftThisWave -= 1
                     score += 1
+                    if soundFX:
+                        alien_explode_sound.play()
             if pygame.sprite.collide_rect(alien, ship):
                 if ship.shieldUp:
                     alien.table()
                     Explosion.position(alien.rect.center)
                     aliensLeftThisWave -= 1
                     score += 1
+                    missilesFired += 1
                     ship.shieldUp = False
                 else:
                     ship.alive = False
                     ship.remove(allsprites)
                     Explosion.position(ship.rect.center)
+                    if soundFX:
+                        ship_explode_sound.play()
 
         #PowerUps
         for powerup in powerups:
@@ -544,7 +610,7 @@ def main():
 
     #Update and draw all sprites and text
         screen.blit(background, (0,0), area=pygame.Rect(0,backgroundLoc,500,500))
-        backgroundLoc -= 1
+        backgroundLoc -= speed 
         if backgroundLoc == 0:
             backgroundLoc = 1500
         allsprites.update()
@@ -570,7 +636,7 @@ def main():
                 and event.key == K_ESCAPE):
                 return False
             elif (event.type == KEYDOWN 
-                and event.key == K_SPACE
+                and event.key == K_RETURN
                 and not isHiScore):
                 return True
             elif (event.type == KEYDOWN
@@ -609,7 +675,7 @@ def main():
                 
     #Update and draw all sprites 
         screen.blit(background, (0,0), area=pygame.Rect(0,backgroundLoc,500,500))
-        backgroundLoc -= 1
+        backgroundLoc -= speed
         if backgroundLoc == 0:
             backgroundLoc = 1500
         allsprites.update()
