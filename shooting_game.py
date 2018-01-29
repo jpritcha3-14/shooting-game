@@ -24,8 +24,7 @@ def load_sound(name):
         sound = pygame.mixer.Sound(fullname)
     except pygame.error:
         print ('Cannot load sound: %s' % fullname)
-        #raise SystemExit(str(geterror()))
-        raise SystemExit('filed to load ', name)
+        raise SystemExit(str(geterror()))
     return sound
 
 def load_image(name, colorkey=None):
@@ -293,22 +292,30 @@ class Database(object):
     numScores = 15
 
     @staticmethod
-    def getSound():
+    def getSound(music=False):
         conn = sqlite3.connect(Database.path)
         c = conn.cursor()
-        c.execute('''CREATE TABLE if not exists sound 
-                     (setting integer)''')
-        c.execute("SELECT * FROM sound")
+        if music:
+            c.execute("CREATE TABLE if not exists music (setting integer)")
+            c.execute("SELECT * FROM music")
+        else:
+            c.execute("CREATE TABLE if not exists sound (setting integer)")
+            c.execute("SELECT * FROM sound")
         setting = c.fetchall()
         conn.close()
-        return setting[0][0] if len(setting) > 0 else 0
+        return bool(setting[0][0]) if len(setting) > 0 else False 
 
     @staticmethod
-    def setSound(setting):
+    def setSound(setting, music=False):
         conn = sqlite3.connect(Database.path)
         c = conn.cursor()
-        c.execute("DELETE FROM sound")
-        c.execute("INSERT INTO sound VALUES (?)", (setting,))
+        table = 'music' if music else 'sound'
+        if music:
+            c.execute("DELETE FROM music")
+            c.execute("INSERT INTO music VALUES (?)", (setting,))
+        else:
+            c.execute("DELETE FROM sound")
+            c.execute("INSERT INTO sound VALUES (?)", (setting,))
         conn.commit()
         conn.close()
 
@@ -346,7 +353,6 @@ class Keyboard(object):
             
 def main():
 #Initialize everything
-
     pygame.mixer.pre_init(11025, -16, 2, 512)
     pygame.init()
     screen = pygame.display.set_mode((500,500))
@@ -399,6 +405,7 @@ def main():
     bomb_sound = load_sound('bomb.ogg')
     alien_explode_sound = load_sound('alien_explode.ogg')
     ship_explode_sound = load_sound('ship_explode.ogg')
+    pygame.mixer.music.load(os.path.join(data_dir, 'music_loop.ogg'))
     
     alienPeriod = clockTime//2 
     curTime = 0 
@@ -425,24 +432,36 @@ def main():
         highScoreTexts.extend([font.render(str(hs[x]), 1, BLUE) for x in range(3)])
         highScorePos.extend([highScoreTexts[x].get_rect(topleft=highScorePos[x].bottomleft) for x in range(-3,0)])
 
-    hiScoreText = font.render('HIGH SCORES', 1, BLUE)
-    hiScorePos = hiScoreText.get_rect(center=screen.get_rect().center)
+    title, titleRect = load_image('title.png')
+    titleRect.midtop = screen.get_rect().inflate(0 ,-200).midtop
+
     startText = font.render('START GAME', 1, BLUE)
-    startPos = startText.get_rect(bottomleft=hiScorePos.topleft)
-    soundText = font.render('SOUND FX ', 1, BLUE)
-    soundPos = soundText.get_rect(topleft=hiScorePos.bottomleft)
-    onText = font.render('ON', 1, RED)
-    offText = font.render('OFF', 1, RED)
-    onPos = onText.get_rect(topleft=soundPos.topright)
-    offPos = offText.get_rect(topleft=soundPos.topright)
+    startPos = startText.get_rect(midtop=titleRect.inflate(0, 100).midbottom)
+    hiScoreText = font.render('HIGH SCORES', 1, BLUE)
+    hiScorePos = hiScoreText.get_rect(topleft=startPos.bottomleft)
+    fxText = font.render('SOUND FX ', 1, BLUE)
+    fxPos = fxText.get_rect(topleft=hiScorePos.bottomleft)
+    fxOnText = font.render('ON', 1, RED)
+    fxOffText = font.render('OFF', 1, RED)
+    fxOnPos = fxOnText.get_rect(topleft=fxPos.topright)
+    fxOffPos = fxOffText.get_rect(topleft=fxPos.topright)
+    musicText = font.render('MUSIC', 1, BLUE)
+    musicPos = fxText.get_rect(topleft=fxPos.bottomleft)
+    musicOnText = font.render('ON', 1, RED)
+    musicOffText = font.render('OFF', 1, RED)
+    musicOnPos = musicOnText.get_rect(topleft=musicPos.topright)
+    musicOffPos = musicOffText.get_rect(topleft=musicPos.topright)
     quitText = font.render('QUIT', 1, BLUE)
-    quitPos = quitText.get_rect(topleft=soundPos.bottomleft)
+    quitPos = quitText.get_rect(topleft=musicPos.bottomleft)
     selectText = font.render('*', 1, BLUE)
     selectPos = selectText.get_rect(topright=startPos.topleft)
-    menuDict = {1:startPos, 2:hiScorePos, 3:soundPos, 4:quitPos}
+    menuDict = {1:startPos, 2:hiScorePos, 3:fxPos, 4:musicPos, 5:quitPos}
     selection = 1
     showHiScores = False
     soundFX = Database.getSound()
+    music = Database.getSound(music=True)
+    if music:
+        pygame.mixer.music.play(loops=-1)
 
     while inMenu:
         clock.tick(clockTime)
@@ -465,8 +484,17 @@ def main():
                     showHiScores = True
                 elif selection == 3:
                     soundFX = not soundFX
+                    if soundFX:
+                        missile_sound.play()
                     Database.setSound(int(soundFX))
                 elif selection == 4:
+                    music = not music
+                    if music:
+                        pygame.mixer.music.play(loops=-1)
+                    else:
+                        pygame.mixer.music.stop()
+                    Database.setSound(int(music), music=True)
+                elif selection == 5:
                     return
             elif (event.type == KEYDOWN and event.key == K_w and selection > 1 and not showHiScores):
                 selection -= 1
@@ -478,8 +506,11 @@ def main():
         if showHiScores:
             textOverlays = zip(highScoreTexts, highScorePos) 
         else:
-            textOverlays = zip([startText, hiScoreText, soundText, quitText, selectText, onText if soundFX else offText],
-                               [startPos, hiScorePos, soundPos, quitPos, selectPos, onPos if soundFX else offPos])
+            textOverlays = zip([startText, hiScoreText, fxText, musicText, quitText, selectText, 
+                                fxOnText if soundFX else fxOffText, musicOnText if music else musicOffText],
+                               [startPos, hiScorePos, fxPos, musicPos, quitPos, selectPos,
+                                fxOnPos if soundFX else fxOffPos, musicOnPos if music else musicOffPos])
+            screen.blit(title, titleRect)
         for txt, pos in textOverlays:
             screen.blit(txt, pos)
         pygame.display.flip()
