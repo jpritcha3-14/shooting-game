@@ -233,7 +233,7 @@ def main():
         #Aliens
         for alien in Alien.active:
             for bomb in bombs:
-                if pygame.sprite.collide_circle(bomb, alien):
+                if pygame.sprite.collide_circle(bomb, alien) and alien in Alien.active:
                     alien.table()
                     Explosion.position(alien.rect.center)
                     missilesFired += 1
@@ -242,7 +242,7 @@ def main():
                     if soundFX:
                         alien_explode_sound.play()
             for missile in Missile.active:
-                if pygame.sprite.collide_rect(missile, alien):
+                if pygame.sprite.collide_rect(missile, alien) and alien in Alien.active:
                     alien.table()
                     missile.table()
                     Explosion.position(alien.rect.center)
