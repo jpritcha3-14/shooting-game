@@ -3,6 +3,10 @@ from collections import deque
 from pygame.locals import *
 from pygame.compat import geterror
 
+from sprites import * 
+from database import Database
+from load import load_image, load_sound, load_music
+
 if not pygame.mixer: print ('Warning, sound disabled')
 if not pygame.font: print ('Warning, fonts disabled')
 
@@ -10,337 +14,6 @@ BLUE = (0, 0, 255)
 RED = (255, 0, 0)
 
 direction = {None:(0,0), K_w:(0,-2), K_s:(0,2), K_a:(-2,0), K_d:(2,0)}
-
-main_dir = os.path.split(os.path.abspath(__file__))[0]
-data_dir = os.path.join(main_dir, 'data')
-
-def load_sound(name):
-    class NoneSound:
-        def play(self): pass
-    if not pygame.mixer or not pygame.mixer.get_init():
-        return NoneSound()
-    fullname = os.path.join(data_dir, name)
-    try:
-        sound = pygame.mixer.Sound(fullname)
-    except pygame.error:
-        print ('Cannot load sound: %s' % fullname)
-        raise SystemExit(str(geterror()))
-    return sound
-
-def load_image(name, colorkey=None):
-    fullname = os.path.join(data_dir, name)
-    try:
-        image = pygame.image.load(fullname)
-    except pygame.error:
-        print('Cannot load image:', fullname)
-        raise SystemExit(str(geterror()))
-    image = image.convert()
-    if colorkey is not None:
-        if colorkey == -1:
-            colorkey = image.get_at((0,0))
-        image.set_colorkey(colorkey, RLEACCEL)
-    return image, image.get_rect()
-
-class MasterSprite(pygame.sprite.Sprite):
-    allsprites = None
-     
-class Explosion(MasterSprite):
-    pool = pygame.sprite.Group()
-    active = pygame.sprite.Group()
-    
-    def __init__(self, speed):
-        super().__init__()
-        self.image, self.rect = load_image('explosion.png', -1)
-        self.linger = speed*3 
-    
-    @classmethod
-    def position(cls, loc):
-        if len(cls.pool) > 0:
-            explosion = cls.pool.sprites()[0]
-            explosion.add(cls.active, cls.allsprites)
-            explosion.remove(cls.pool)
-            explosion.rect.center = loc
-            explosion.linger = 12 
-
-    def update(self):
-        self.linger -= 1
-        if self.linger <= 0:
-            self.remove(self.allsprites, self.active)
-            self.add(self.pool)
-
-class Missile(MasterSprite):
-    pool = pygame.sprite.Group()
-    active = pygame.sprite.Group()
-
-    def __init__(self, speed):
-        super().__init__()
-        self.image, self.rect = load_image('missile.png', -1)
-        screen = pygame.display.get_surface()
-        self.area = screen.get_rect()
-        self.speed = -4*speed
-
-    @classmethod
-    def position(cls, loc):
-        if len(cls.pool) > 0:
-            missile = cls.pool.sprites()[0]
-            missile.add(cls.allsprites, cls.active)
-            missile.remove(cls.pool)
-            missile.rect.midbottom = loc
-        
-    def table(self):
-        self.add(self.pool)
-        self.remove(self.allsprites, self.active)
-
-    def update(self):
-        newpos = self.rect.move(0,self.speed)
-        self.rect = newpos
-        if self.rect.top < self.area.top:
-            self.table()
-
-            
-class Bomb(pygame.sprite.Sprite):
-    def __init__(self, ship):
-        super().__init__()
-        self.image = None
-        screen = pygame.display.get_surface()
-        self.area = screen.get_rect()
-        self.radius = 20
-        self.radiusIncrement = 4
-        self.rect = ship.rect 
-
-    def update(self):
-        self.radius += self.radiusIncrement 
-        pygame.draw.circle(pygame.display.get_surface(), Color(0,0,255,128), self.rect.center, self.radius, 3)
-        if (self.rect.center[1] - self.radius <= self.area.top 
-            and self.rect.center[1] + self.radius >= self.area.bottom 
-            and self.rect.center[0] - self.radius <= self.area.left 
-            and self.rect.center[0] + self.radius >= self.area.right):
-            self.kill()
-
-class Powerup(pygame.sprite.Sprite):
-    def __init__(self, kindof):
-        super().__init__()
-        self.image, self.rect = load_image(kindof + '_powerup.png', -1)
-        self.original = self.image
-        screen = pygame.display.get_surface()
-        self.area = screen.get_rect()
-        self.rect.midtop = (random.randint(
-                            self.area.left + self.rect.width//2, 
-                            self.area.right - self.rect.width//2), self.area.top)
-        self.speed = 2
-        self.angle = 0
-
-    def update(self):
-        center = self.rect.center
-        self.angle = (self.angle + 2) % 360
-        rotate = pygame.transform.rotate
-        self.image = rotate(self.original, self.angle)
-        self.rect = self.image.get_rect(center=(center[0], center[1]+self.speed))
-
-class BombPowerup(Powerup):
-    def __init__(self):
-        super().__init__('bomb')
-        self.pType = 'bomb'
-
-class ShieldPowerup(Powerup):
-    def __init__(self):
-        super().__init__('shield')
-        self.pType = 'shield'
-
-class Ship(pygame.sprite.Sprite):
-    def __init__(self, speed):
-        super().__init__()
-        self.image, self.rect = load_image('ship.png', -1)
-        self.original = self.image
-        self.shield, self.rect = load_image('ship_shield.png', -1)
-        self.screen = pygame.display.get_surface()
-        self.area = self.screen.get_rect()
-        self.rect.midbottom = (self.screen.get_width()//2, self.area.bottom)
-        self.radius = max(self.rect.width, self.rect.height)
-        self.alive = True
-        self.shieldUp = False
-        self.vert = 0
-        self.horiz = 0
-        self.speed = speed
-
-    def initializeKeys(self):
-        keyState = pygame.key.get_pressed()
-        if keyState[K_w]:
-            self.vert -= 2*speed
-        if keyState[K_s]:
-            self.vert += 2*speed
-        if keyState[K_a]:
-            self.horiz -= 2*speed
-        if keyState[K_d]:
-            self.horiz += 2*speed
-
-    def update(self):
-        newpos = self.rect.move((self.horiz, self.vert))
-        newhoriz = self.rect.move((self.horiz, 0))
-        newvert = self.rect.move((0, self.vert))
-
-        if not (newpos.left <= self.area.left
-            or newpos.top <= self.area.top
-            or newpos.right >= self.area.right
-            or newpos.bottom >= self.area.bottom):
-            self.rect = newpos
-        elif not (newhoriz.left <= self.area.left
-            or newhoriz.right >= self.area.right):
-            self.rect = newhoriz
-        elif not (newvert.top <= self.area.top
-            or newvert.bottom >= self.area.bottom):
-            self.rect = newvert
-
-        if self.shieldUp and self.image != self.shield:
-            self.image = self.shield 
-
-        if not self.shieldUp and self.image != self.original:
-            self.image = self.original
-
-    def bomb(self):
-        return Bomb(self)
-
-class Alien(MasterSprite):
-    pool = pygame.sprite.Group()
-    active = pygame.sprite.Group()
-
-    def __init__(self, color, speed):
-        super().__init__()
-        self.image, self.rect = load_image('space_invader_'+ color +'.png', -1)
-        self.initialRect = self.rect
-        screen = pygame.display.get_surface()
-        self.area = screen.get_rect()
-        self.loc = 0
-        self.speed = speed 
-        self.radius = min(self.rect.width//2, self.rect.height//2) 
-
-    @classmethod
-    def position(cls):
-        if len(cls.pool) > 0 and cls.numOffScreen > 0:
-            alien = random.choice(cls.pool.sprites())
-            if isinstance(alien, Crawly):
-                alien.rect.midbottom = (random.choice((alien.area.left, alien.area.right)),
-                                        random.randint((alien.area.bottom*3)//4, alien.area.bottom))
-            else:
-                alien.rect.midtop = (random.randint(alien.area.left + alien.rect.width//2, 
-                                     alien.area.right - alien.rect.width//2), alien.area.top)
-            alien.initialRect = alien.rect
-            alien.loc = 0
-            alien.add(cls.allsprites, cls.active)
-            alien.remove(cls.pool)
-            Alien.numOffScreen -= 1
-
-    def update(self):
-        horiz, vert = self.moveFunc()
-        if horiz + self.initialRect.x > 500:
-            horiz -= 500 + self.rect.width
-        elif horiz + self.initialRect.x < 0 - self.rect.width:
-            horiz += 500 + self.rect.width
-        self.rect = self.initialRect.move((horiz, self.loc + vert))
-        self.loc = self.loc + self.speed 
-        if self.rect.top > self.area.bottom:
-            self.table()
-            Alien.numOffScreen += 1
-
-    def table(self):
-        self.kill()
-        self.add(self.pool)
-
-class Siney(Alien):
-    def __init__(self, speed):
-        super().__init__('green', speed)
-        self.amp = random.randint(self.rect.width, 3*self.rect.width)
-        self.freq = (1/20)
-        self.moveFunc = lambda: (self.amp*math.sin(self.loc*self.freq), 0)
-
-class Roundy(Alien):
-    def __init__(self, speed):
-        super().__init__('red', speed)
-        self.amp = random.randint(self.rect.width, 2*self.rect.width)
-        self.freq = 1/(20)
-        self.moveFunc = lambda: (self.amp*math.sin(self.loc*self.freq), self.amp*math.cos(self.loc*self.freq))
-
-class Spikey(Alien):
-    def __init__(self, speed):
-        super().__init__('blue', speed)
-        self.slope = random.choice(list(x for x in range(-3,3) if x != 0))
-        self.period = random.choice(list(4*x for x in range(10,41)))
-        self.moveFunc = lambda: (self.slope*(self.loc % self.period) if self.loc % self.period < self.period // 2 else self.slope*self.period // 2 - self.slope*((self.loc % self.period) - self.period//2), 0)
-                
-class Fasty(Alien):
-    def __init__(self, speed):
-        super().__init__('white', speed)
-        self.moveFunc = lambda: (0, 3*self.loc)
-
-class Crawly(Alien):
-    def __init__(self, speed):
-        super().__init__('yellow', speed)
-        self.moveFunc = lambda: (self.loc, 0)
-        
-    def update(self):
-        horiz, vert = self.moveFunc()
-        horiz = -horiz if self.initialRect.center[0] == self.area.right else horiz
-        if (horiz + self.initialRect.left > self.area.right
-            or horiz + self.initialRect.right < self.area.left):
-            self.table()
-            Alien.numOffScreen += 1
-        self.rect = self.initialRect.move((horiz, vert))
-        self.loc = self.loc + self.speed 
-
-class Database(object):
-    path = os.path.join(data_dir, 'hiScores.db')
-    numScores = 15
-
-    @staticmethod
-    def getSound(music=False):
-        conn = sqlite3.connect(Database.path)
-        c = conn.cursor()
-        if music:
-            c.execute("CREATE TABLE if not exists music (setting integer)")
-            c.execute("SELECT * FROM music")
-        else:
-            c.execute("CREATE TABLE if not exists sound (setting integer)")
-            c.execute("SELECT * FROM sound")
-        setting = c.fetchall()
-        conn.close()
-        return bool(setting[0][0]) if len(setting) > 0 else False 
-
-    @staticmethod
-    def setSound(setting, music=False):
-        conn = sqlite3.connect(Database.path)
-        c = conn.cursor()
-        table = 'music' if music else 'sound'
-        if music:
-            c.execute("DELETE FROM music")
-            c.execute("INSERT INTO music VALUES (?)", (setting,))
-        else:
-            c.execute("DELETE FROM sound")
-            c.execute("INSERT INTO sound VALUES (?)", (setting,))
-        conn.commit()
-        conn.close()
-
-    @staticmethod
-    def getScores():
-        conn = sqlite3.connect(Database.path)
-        c = conn.cursor()
-        c.execute('''CREATE TABLE if not exists scores
-                     (name text, score integer, accuracy real)''')
-        c.execute("SELECT * FROM scores ORDER BY score DESC")
-        hiScores = c.fetchall()
-        conn.close()
-        return hiScores
-
-    @staticmethod
-    def setScore(hiScores, entry):
-        conn = sqlite3.connect(Database.path)
-        c = conn.cursor()
-        if len(hiScores) == Database.numScores:
-            lowScoreName = hiScores[-1][0]
-            lowScore = hiScores[-1][1]
-            c.execute("DELETE FROM scores WHERE (name = ? AND score = ?)", (lowScoreName, lowScore))
-        c.execute("INSERT INTO scores VALUES (?,?,?)", entry)
-        conn.commit()
-        conn.close()
 
 class Keyboard(object):
     keys = {K_a:'A', K_b:'B', K_c:'C', K_d:'D',
@@ -380,22 +53,24 @@ def main():
     pygame.display.flip()
     
 #Prepare game objects
-    speed = 2 
+    speed = 1.5 
+    MasterSprite.speed = speed
+    alienPeriod = 60/speed 
     clockTime = 60  #maximum FPS 
     clock = pygame.time.Clock()
-    ship = Ship(speed)
-    alienTypes = (Siney, Spikey, Roundy, Fasty, Crawly)
+    ship = Ship()
+    initialAlienTypes = (Siney, Spikey)
     powerupTypes = (BombPowerup, ShieldPowerup)
     
     #Sprite groups 
     alldrawings = pygame.sprite.Group()
     allsprites = pygame.sprite.RenderPlain((ship,))
     MasterSprite.allsprites = allsprites
-    Alien.pool = pygame.sprite.Group([alien(speed) for alien in alienTypes for _ in range(5)])
+    Alien.pool = pygame.sprite.Group([alien() for alien in initialAlienTypes for _ in range(5)])
     Alien.active = pygame.sprite.Group() 
-    Missile.pool = pygame.sprite.Group([Missile(speed) for _ in range(10)])
+    Missile.pool = pygame.sprite.Group([Missile() for _ in range(10)])
     Missile.active = pygame.sprite.Group()
-    Explosion.pool = pygame.sprite.Group([Explosion(speed) for _ in range(10)])
+    Explosion.pool = pygame.sprite.Group([Explosion() for _ in range(10)])
     Explosion.active = pygame.sprite.Group()
     bombs = pygame.sprite.Group()
     powerups = pygame.sprite.Group()
@@ -405,7 +80,7 @@ def main():
     bomb_sound = load_sound('bomb.ogg')
     alien_explode_sound = load_sound('alien_explode.ogg')
     ship_explode_sound = load_sound('ship_explode.ogg')
-    pygame.mixer.music.load(os.path.join(data_dir, 'music_loop.ogg'))
+    load_music('music_loop.ogg')
     
     alienPeriod = clockTime//2 
     curTime = 0 
@@ -460,7 +135,7 @@ def main():
     showHiScores = False
     soundFX = Database.getSound()
     music = Database.getSound(music=True)
-    if music:
+    if music and pygame.mixer:
         pygame.mixer.music.play(loops=-1)
 
     while inMenu:
@@ -468,7 +143,7 @@ def main():
 
         screen.blit(background, (0,0), area=pygame.Rect(0,backgroundLoc,500,500))
         backgroundLoc -= speed
-        if backgroundLoc == 0:
+        if backgroundLoc - speed <= speed:
             backgroundLoc = 1500
 
         for event in pygame.event.get():
@@ -487,7 +162,7 @@ def main():
                     if soundFX:
                         missile_sound.play()
                     Database.setSound(int(soundFX))
-                elif selection == 4:
+                elif selection == 4 and pygame.mixer:
                     music = not music
                     if music:
                         pygame.mixer.music.play(loops=-1)
@@ -626,15 +301,32 @@ def main():
         if aliensLeftThisWave <= 0:
             if betweenWaveCount > 0:
                 betweenWaveCount -= 1
-                nextWaveText = font.render('Wave ' + str(wave+1) + ' in', 1, (0,0,255))
-                nextWaveNum = font.render(str((betweenWaveCount // clockTime) + 1), 1, (0,0,255))
+                nextWaveText = font.render('Wave ' + str(wave+1) + ' in', 1, BLUE)
+                nextWaveNum = font.render(str((betweenWaveCount // clockTime) + 1), 1, BLUE)
                 text.extend([nextWaveText, nextWaveNum])
                 nextWavePos = nextWaveText.get_rect(center=screen.get_rect().center)
                 nextWaveNumPos = nextWaveNum.get_rect(midtop=nextWavePos.midbottom)
                 textposition.extend([nextWavePos, nextWaveNumPos])
+                if wave % 4 == 0:
+                    speedUpText = font.render('SPEED UP!', 1, RED)
+                    speedUpPos = speedUpText.get_rect(midtop=nextWaveNumPos.midbottom)
+                    text.append(speedUpText)
+                    textposition.append(speedUpPos)
             elif betweenWaveCount == 0:
+                if wave % 4 == 0:
+                    speed += 0.5
+                    MasterSprite.speed = speed
+                    ship.initializeKeys()
+                    aliensLeftThisWave, aliensThisWave, Alien.numOffScreen = 3*[10]
+                else:
+                    aliensLeftThisWave, aliensThisWave, Alien.numOffScreen = 3*[2*aliensThisWave]
+                if wave == 1:
+                    Alien.pool.add([Fasty() for _ in range(5)])
+                if wave == 2:
+                    Alien.pool.add([Roundy() for _ in range(5)])
+                if wave == 3:
+                    Alien.pool.add([Crawly() for _ in range(5)])
                 wave += 1
-                aliensLeftThisWave, aliensThisWave, Alien.numOffScreen = 3*[2*aliensThisWave]
                 betweenWaveCount = betweenWaveTime
                 
         textOverlays = zip(text, textposition)
@@ -642,7 +334,7 @@ def main():
     #Update and draw all sprites and text
         screen.blit(background, (0,0), area=pygame.Rect(0,backgroundLoc,500,500))
         backgroundLoc -= speed 
-        if backgroundLoc == 0:
+        if backgroundLoc - speed <= speed:
             backgroundLoc = 1500
         allsprites.update()
         allsprites.draw(screen)
@@ -700,14 +392,14 @@ def main():
         else:
             gameOverText = font.render('GAME OVER', 1, BLUE)
             gameOverPos = gameOverText.get_rect(center=screen.get_rect().center)
-            scoreText = font.render('Score: {}'.format(score), 1, BLUE)
+            scoreText = font.render('SCORE: {}'.format(score), 1, BLUE)
             scorePos = scoreText.get_rect(midtop=gameOverPos.midbottom)
             textOverlay = zip([gameOverText, scoreText], [gameOverPos, scorePos])
                 
     #Update and draw all sprites 
         screen.blit(background, (0,0), area=pygame.Rect(0,backgroundLoc,500,500))
         backgroundLoc -= speed
-        if backgroundLoc == 0:
+        if backgroundLoc - speed <= 0:
             backgroundLoc = 1500
         allsprites.update()
         allsprites.draw(screen)
